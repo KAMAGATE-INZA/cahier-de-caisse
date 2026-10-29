@@ -1,6 +1,6 @@
 // Garde l'appli disponible hors connexion.
 // Change ce numéro à chaque mise à jour de l'appli pour forcer le rafraîchissement.
-const CACHE = "cahier-de-caisse-v1";
+const CACHE = "cahier-de-caisse-v2";
 const FICHIERS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {

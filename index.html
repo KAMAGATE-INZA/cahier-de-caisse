@@ -18,6 +18,7 @@
   --bg:#f3f5f1; --surface:#ffffff; --ink:#15211d; --muted:#5d6b66; --line:#dbe2dd;
   --accent:#0d6b57; --accent-ink:#ffffff; --accent-soft:#dcefe8;
   --gold:#a86a00; --gold-soft:#fbefd4; --red:#b3392f; --red-soft:#f8e1de;
+  --gain-bg:#0d6b57; --gain-ink:#ffffff; --loss-bg:#b3392f; --loss-ink:#ffffff; --zero-bg:#5d6b66; --zero-ink:#ffffff;
   --display:ui-rounded, "SF Pro Rounded", "Segoe UI", Roboto, system-ui, sans-serif;
   --body:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme:light;
@@ -25,7 +26,8 @@
 @media (prefers-color-scheme: dark){:root{
   --bg:#0f1513; --surface:#18211e; --ink:#e6eeea; --muted:#9aaba4; --line:#2a3632;
   --accent:#3fbf9f; --accent-ink:#06231c; --accent-soft:#163a31;
-  --gold:#f0b54a; --gold-soft:#3a2c10; --red:#ef8a7f; --red-soft:#3d1c18; color-scheme:dark}}
+  --gold:#f0b54a; --gold-soft:#3a2c10; --red:#ef8a7f; --red-soft:#3d1c18;
+  --gain-bg:#14765f; --gain-ink:#ffffff; --loss-bg:#a5352c; --loss-ink:#ffffff; --zero-bg:#2a3632; --zero-ink:#e6eeea; color-scheme:dark}}
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -54,8 +56,12 @@ nav.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 section{padding-top:18px;display:grid;gap:14px}
 .label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
 
-.hero{background:var(--accent);color:var(--accent-ink);border-radius:18px;padding:18px}
+.hero{background:var(--gain-bg);color:var(--gain-ink);border-radius:18px;padding:18px}
+.hero.perte{background:var(--loss-bg);color:var(--loss-ink)}
+.hero.zero{background:var(--zero-bg);color:var(--zero-ink)}
 .hero .label{color:inherit;opacity:.8}
+.hero .verdict{font-family:var(--display);font-weight:700;font-size:19px;margin-top:6px;text-wrap:balance}
+.hero .explique{font-size:14px;opacity:.9;margin-top:2px}
 .hero .big{font-family:var(--display);font-weight:800;font-size:40px;line-height:1.05;margin-top:4px}
 .ledger{margin-top:14px;display:grid;gap:6px;font-size:14px}
 .ledger div{display:flex;justify-content:space-between;gap:12px}
@@ -227,14 +233,32 @@ function bannerSauvegarde() {
 function renderBilan(st) {
   const el = $("#v-bilan");
   const missing = S.data.produits.filter(p => !(+p.cout) || !(+p.quantite));
-  let h = bannerSauvegarde() + `<div class="hero">
+  const net = Math.round(st.net), abs = F(Math.abs(net));
+  const activite = S.data.ventes.length + S.data.depenses.length > 0;
+  let etat, signe, verdict, explique, ligne;
+  if (!activite) {
+    etat = "zero"; signe = ""; verdict = "Pas encore de vente";
+    explique = "Enregistre ta première vente pour voir si tu gagnes ou perds de l'argent."; ligne = "= Résultat";
+  } else if (net > 0) {
+    etat = "gain"; signe = "+"; verdict = "Tu as gagné " + abs;
+    explique = "Tes ventes couvrent le coût des produits vendus et tes dépenses, et il te reste ce bénéfice."; ligne = "= Ce que tu as gagné";
+  } else if (net < 0) {
+    etat = "perte"; signe = "−"; verdict = "Tu as perdu " + abs;
+    explique = "Tes ventes ne couvrent pas encore le coût des produits vendus et tes dépenses. Il te manque " + abs + " pour rentrer dans tes frais."; ligne = "= Ce que tu as perdu";
+  } else {
+    etat = "zero"; signe = ""; verdict = "Ni gain ni perte";
+    explique = "Tu as juste récupéré ce que tu as dépensé."; ligne = "= Résultat";
+  }
+  let h = bannerSauvegarde() + `<div class="hero ${etat === "gain" ? "" : etat}">
     <div class="label">Bénéfice net</div>
-    <div class="big num">${F(st.net)}</div>
+    <div class="big num">${signe}${abs}</div>
+    <div class="verdict">${verdict}</div>
+    <div class="explique">${explique}</div>
     <div class="ledger num">
       <div><span>Ventes</span><span>${F(st.ca)}</span></div>
       <div><span>− Coût des produits vendus</span><span>${F(st.cout)}</span></div>
       <div><span>− Dépenses</span><span>${F(st.dep)}</span></div>
-      <div class="tot"><span>= Ce que tu as vraiment gagné</span><span>${F(st.net)}</span></div>
+      <div class="tot"><span>${ligne}</span><span>${signe}${abs}</span></div>
     </div></div>
     <div class="chips">
       <div class="chip gold"><div class="label">À recevoir</div><div class="v num">${F(st.aRecevoir)}</div></div>
