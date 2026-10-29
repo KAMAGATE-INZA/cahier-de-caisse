@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cahier de Caisse</title>
+<meta name="theme-color" content="#0d6b57">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Caisse">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+/* Carnet de caisse mobile : bilan en tête, quatre onglets, bouton d'ajout flottant. Polices système pour marcher hors connexion. */
+:root{
+  --bg:#f3f5f1; --surface:#ffffff; --ink:#15211d; --muted:#5d6b66; --line:#dbe2dd;
+  --accent:#0d6b57; --accent-ink:#ffffff; --accent-soft:#dcefe8;
+  --gold:#a86a00; --gold-soft:#fbefd4; --red:#b3392f; --red-soft:#f8e1de;
+  --display:ui-rounded, "SF Pro Rounded", "Segoe UI", Roboto, system-ui, sans-serif;
+  --body:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1513; --surface:#18211e; --ink:#e6eeea; --muted:#9aaba4; --line:#2a3632;
+  --accent:#3fbf9f; --accent-ink:#06231c; --accent-soft:#163a31;
+  --gold:#f0b54a; --gold-soft:#3a2c10; --red:#ef8a7f; --red-soft:#3d1c18; color-scheme:dark}}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-bottom:calc(110px + env(safe-area-inset-bottom,0px))}
+[hidden]{display:none!important}
+.wrap{max-width:640px;margin:0 auto}
+.num{font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{padding-block:18px 8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+header h1{font-size:26px;font-weight:800;letter-spacing:-.01em}
+.pill{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-weight:600;font-size:14px;white-space:nowrap}
+
+nav.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;gap:4px;padding-block:8px;border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+nav.tabs button{flex:1;border:0;background:transparent;padding:9px 4px;border-radius:999px;font-weight:600;font-size:14px;color:var(--muted)}
+nav.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+
+.banner{padding:10px 12px;border-radius:10px;background:var(--gold-soft);color:var(--ink);font-size:14px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+section{padding-top:18px;display:grid;gap:14px}
+.label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+
+.hero{background:var(--accent);color:var(--accent-ink);border-radius:18px;padding:18px}
+.hero .label{color:inherit;opacity:.8}
+.hero .big{font-family:var(--display);font-weight:800;font-size:40px;line-height:1.05;margin-top:4px}
+.ledger{margin-top:14px;display:grid;gap:6px;font-size:14px}
+.ledger div{display:flex;justify-content:space-between;gap:12px}
+.ledger .tot{border-top:1px solid currentColor;padding-top:6px;font-weight:700}
+.ledger div:not(.tot){opacity:.9}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chip{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px}
+.chip .v{font-weight:700;font-size:20px;margin-top:2px}
+.chip.gold{background:var(--gold-soft);border-color:transparent}
+.chip.gold .v{color:var(--gold)}
+
+.prod{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px}
+.prod .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.prod h3{font-size:18px;font-weight:600}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.tag.gold{background:var(--gold-soft);color:var(--gold)}
+.tag.red{background:var(--red-soft);color:var(--red)}
+.bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:999px}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;font-size:13px}
+.kv b{display:block;font-size:15px}
+.note{font-size:13px;color:var(--muted)}
+
+.row{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:start}
+.row .t{font-weight:600}
+.row .m{font-size:13px;color:var(--muted)}
+.row .amt{font-weight:700;text-align:right}
+.row .acts{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.mini{border:1px solid var(--line);background:transparent;border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600}
+.mini.danger{color:var(--red)}
+.mini.armed{background:var(--red);color:var(--surface);border-color:var(--red)}
+.paid{border:0;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px}
+.paid.yes{background:var(--accent-soft);color:var(--accent)}
+.paid.no{background:var(--gold-soft);color:var(--gold)}
+.empty{border:1.5px dashed var(--line);border-radius:14px;padding:22px 16px;text-align:center;color:var(--muted)}
+.empty b{display:block;color:var(--ink);margin-bottom:4px}
+.dayhead{font-size:13px;font-weight:600;color:var(--muted);margin-top:4px}
+
+.fab{position:fixed;right:max(16px,calc(env(safe-area-inset-right,0px) + 16px));bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:6;
+  border:0;border-radius:999px;background:var(--ink);color:var(--bg);font-weight:700;padding:15px 22px;font-size:16px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:20}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--surface);border-radius:20px 20px 0 0;max-height:90%;overflow:auto;
+  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 18px) max(16px,env(safe-area-inset-left,0px))}
+.sheet form,.sheet .inner{max-width:600px;margin:0 auto;display:grid;gap:12px}
+.sheet h2{font-size:22px}
+.sheet p{margin:0}
+.field{display:grid;gap:5px}
+.field label{font-size:13px;font-weight:600;color:var(--muted)}
+.field input,.field select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:11px 12px;font-size:16px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.check{display:flex;gap:10px;align-items:center;font-weight:600}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.hint{font-size:12px;color:var(--muted)}
+.btns{display:flex;gap:10px}
+.btn{flex:1;border:0;border-radius:12px;padding:13px;font-weight:700;font-size:16px}
+.btn.pri{background:var(--accent);color:var(--accent-ink)}
+.btn.sec{background:var(--bg);border:1px solid var(--line)}
+.btn.warn{background:var(--red);color:var(--surface)}
+.err{color:var(--red);font-size:14px}
+.box{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:8px;font-size:14px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 86px);z-index:30;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);text-align:center}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .22s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.5}}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Cahier de Caisse</h1>
+    <button class="pill" id="btn-save">Sauvegarde</button>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="bilan" aria-selected="true">Bilan</button>
+    <button role="tab" data-tab="ventes" aria-selected="false">Ventes</button>
+    <button role="tab" data-tab="stock" aria-selected="false">Stock</button>
+    <button role="tab" data-tab="depenses" aria-selected="false">Dépenses</button>
+  </nav>
+  <section id="v-bilan"></section>
+  <section id="v-ventes" hidden></section>
+  <section id="v-stock" hidden></section>
+  <section id="v-depenses" hidden></section>
+</div>
+
+<button class="fab" id="fab">+ Vente</button>
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" hidden></div>
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="import-file" accept="application/json,.json" hidden>
+
+<script>
+/* ================= Base de données locale (JSON sur l'appareil) ================= */
+const KEY = "cahier-de-caisse:v1";
+const FORMAT = 1;
+
+function donneesInitiales() {
+  return {
+    format: FORMAT, cree: Date.now(), modifie: Date.now(), derniereSauvegarde: null,
+    produits: [], ventes: [], depenses: []
+  };
+}
+function charger() {
+  try { const raw = localStorage.getItem(KEY); if (raw) { const d = JSON.parse(raw); if (valide(d)) return d; } } catch {}
+  return null;
+}
+function valide(d) { return d && Array.isArray(d.produits) && Array.isArray(d.ventes) && Array.isArray(d.depenses); }
+function enregistrer() {
+  S.data.modifie = Date.now();
+  try { localStorage.setItem(KEY, JSON.stringify(S.data)); return true; }
+  catch { toast("Impossible d'enregistrer sur cet appareil. Fais une sauvegarde."); return false; }
+}
+const nouvelId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const db = {
+  ajouter(col, obj) { S.data[col].push({ id: nouvelId(), ...obj }); enregistrer(); render(); },
+  modifier(col, id, patch) { const x = S.data[col].find(o => o.id === id); if (x) Object.assign(x, patch); enregistrer(); render(); },
+  supprimer(col, id) { S.data[col] = S.data[col].filter(o => o.id !== id); enregistrer(); render(); }
+};
+
+/* ================= État & utilitaires ================= */
+const S = { data: charger() || donneesInitiales(), tab: "bilan" };
+let stockageOK = true;
+try { localStorage.setItem(KEY + ":test", "1"); localStorage.removeItem(KEY + ":test"); } catch { stockageOK = false; }
+if (stockageOK && !localStorage.getItem(KEY)) enregistrer();
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+const $ = s => document.querySelector(s);
+const fmt = new Intl.NumberFormat("fr-FR");
+const F = n => fmt.format(Math.round(n || 0)) + " F";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+const dayLabel = iso => { try { return new Date(iso + "T12:00:00").toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"}); } catch { return iso; } };
+const joursDepuis = t => t ? Math.floor((Date.now() - t) / 86400000) : null;
+
+/* ================= Calculs ================= */
+function stats() {
+  const byProd = {};
+  for (const p of S.data.produits) byProd[p.id] = { p, vendus: 0, ca: 0, cout: 0 };
+  let ca = 0, cout = 0, aRecevoir = 0;
+  for (const v of S.data.ventes) {
+    const q = +v.qte || 0, total = q * (+v.prix || 0);
+    const bp = byProd[v.produitId];
+    const cu = bp ? (+bp.p.cout || 0) : 0;
+    ca += total; cout += q * cu;
+    if (!v.encaisse) aRecevoir += total;
+    if (bp) { bp.vendus += q; bp.ca += total; bp.cout += q * cu; }
+  }
+  const dep = S.data.depenses.reduce((s, d) => s + (+d.montant || 0), 0);
+  let valeurStock = 0;
+  for (const id in byProd) { const b = byProd[id]; b.restant = Math.max(0, (+b.p.quantite || 0) - b.vendus); valeurStock += b.restant * (+b.p.cout || 0); }
+  return { byProd, ca, cout, dep, net: ca - cout - dep, aRecevoir, valeurStock };
+}
+
+/* ================= Affichage ================= */
+function render() {
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
+  for (const t of ["bilan","ventes","stock","depenses"]) $("#v-" + t).hidden = t !== S.tab;
+  $("#fab").textContent = S.tab === "depenses" ? "+ Dépense" : S.tab === "stock" ? "+ Produit" : "+ Vente";
+  const st = stats();
+  renderBilan(st); renderVentes(); renderStock(st); renderDepenses();
+}
+
+function bannerSauvegarde() {
+  if (!stockageOK) return `<div class="banner"><span>Ce navigateur bloque l'enregistrement. Ouvre l'appli en navigation normale (pas privée).</span></div>`;
+  const n = S.data.ventes.length + S.data.depenses.length;
+  const j = joursDepuis(S.data.derniereSauvegarde);
+  if (n === 0) return "";
+  if (j === null || j >= 7) return `<div class="banner"><span>${j === null ? "Tu n'as encore jamais sauvegardé tes données." : "Dernière sauvegarde il y a " + j + " jours."}</span><button class="mini" data-act="exporter">Sauvegarder</button></div>`;
+  return "";
+}
+
+function renderBilan(st) {
+  const el = $("#v-bilan");
+  const missing = S.data.produits.filter(p => !(+p.cout) || !(+p.quantite));
+  let h = bannerSauvegarde() + `<div class="hero">
+    <div class="label">Bénéfice net</div>
+    <div class="big num">${F(st.net)}</div>
+    <div class="ledger num">
+      <div><span>Ventes</span><span>${F(st.ca)}</span></div>
+      <div><span>− Coût des produits vendus</span><span>${F(st.cout)}</span></div>
+      <div><span>− Dépenses</span><span>${F(st.dep)}</span></div>
+      <div class="tot"><span>= Ce que tu as vraiment gagné</span><span>${F(st.net)}</span></div>
+    </div></div>
+    <div class="chips">
+      <div class="chip gold"><div class="label">À recevoir</div><div class="v num">${F(st.aRecevoir)}</div></div>
+      <div class="chip"><div class="label">Valeur du stock</div><div class="v num">${F(st.valeurStock)}</div></div>
+    </div>`;
+  if (missing.length) h += `<div class="banner"><span>Complète ${missing.map(p => "<b>" + esc(p.nom) + "</b>").join(", ")} dans l'onglet Stock (coût ou quantité manquant). Sans ça, le bénéfice affiché est faux.</span></div>`;
+  h += `<div class="label">Par produit</div>`;
+  if (!S.data.produits.length) h += `<div class="empty"><b>Aucun produit</b>Ajoute ton premier produit dans l'onglet Stock.</div>`;
+  for (const p of S.data.produits) {
+    const b = st.byProd[p.id], q = +p.quantite || 0, pct = q ? Math.min(100, b.vendus / q * 100) : 0;
+    const margeU = (p.mode === "depot" ? (+p.reverse || 0) : (+p.prixVente || 0)) - (+p.cout || 0);
+    const realU = b.vendus ? (b.ca - b.cout) / b.vendus : null;
+    h += `<div class="prod">
+      <div class="top"><h3>${esc(p.nom)}</h3><span class="tag ${p.mode === "depot" ? "gold" : ""}">${p.mode === "depot" ? "En dépôt" : "En stock"}</span></div>
+      <div class="bar" role="img" aria-label="${b.vendus} vendus sur ${q}"><i style="width:${pct}%"></i></div>
+      <div class="kv num">
+        <div><span class="note">Vendus</span><b>${b.vendus}${q ? " / " + q : ""}</b></div>
+        <div><span class="note">${p.mode === "depot" ? "Chez le vendeur" : "Restants"}</span><b>${q ? b.restant : "?"}</b></div>
+        <div><span class="note">Marge / pièce</span><b>${realU !== null ? F(realU) : (+p.cout ? F(margeU) : "?")}</b></div>
+      </div>
+      ${p.note ? `<div class="note">${esc(p.note)}</div>` : ""}
+    </div>`;
+  }
+  el.innerHTML = h;
+}
+
+function renderVentes() {
+  const el = $("#v-ventes");
+  if (!S.data.ventes.length) { el.innerHTML = `<div class="empty"><b>Aucune vente enregistrée</b>Touche « + Vente » à chaque vente, même petite. C'est ce qui rend ton bilan juste.</div>`; return; }
+  const name = id => (S.data.produits.find(p => p.id === id) || {}).nom || "Produit supprimé";
+  const list = [...S.data.ventes].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.cree||0) - (a.cree||0));
+  let h = "", last = "";
+  for (const v of list) {
+    if (v.date !== last) { h += `<div class="dayhead">${esc(dayLabel(v.date))}</div>`; last = v.date; }
+    h += `<div class="row">
+      <div><div class="t">${esc(name(v.produitId))} × ${+v.qte}</div>
+      <div class="m">${[v.client, v.paiement].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</div></div>
+      <div class="amt num">${F((+v.qte||0)*(+v.prix||0))}</div>
+      <div class="acts">
+        <button class="paid ${v.encaisse ? "yes" : "no"}" data-act="toggle" data-id="${v.id}">${v.encaisse ? "Encaissé ✓" : "À recevoir — marquer encaissé"}</button>
+        <button class="mini danger" data-act="del" data-col="ventes" data-id="${v.id}">Supprimer</button>
+      </div></div>`;
+  }
+  el.innerHTML = h;
+}
+
+function renderStock(st) {
+  const el = $("#v-stock");
+  if (!S.data.produits.length) { el.innerHTML = `<div class="empty"><b>Aucun produit</b>Ajoute chaque produit avec son coût de revient : prix d'achat + transport + douane, divisé par le nombre de pièces.</div>`; return; }
+  let h = "";
+  for (const p of S.data.produits) {
+    const b = st.byProd[p.id];
+    h += `<div class="row">
+      <div><div class="t">${esc(p.nom)}</div>
+      <div class="m num">Coût ${+p.cout ? F(p.cout) : "?"} · Vente ${+p.prixVente ? F(p.prixVente) : "?"}${p.mode === "depot" ? " · Reversé " + (+p.reverse ? F(p.reverse) : "?") : ""}</div></div>
+      <div class="amt num">${+p.quantite ? b.restant + " restant" + (b.restant > 1 ? "s" : "") : `<span class="tag red">À compléter</span>`}</div>
+      <div class="acts">
+        <button class="mini" data-act="edit" data-id="${p.id}">Modifier</button>
+        <button class="mini danger" data-act="del" data-col="produits" data-id="${p.id}">Supprimer</button>
+      </div></div>`;
+  }
+  el.innerHTML = h;
+}
+
+function renderDepenses() {
+  const el = $("#v-depenses");
+  if (!S.data.depenses.length) { el.innerHTML = `<div class="empty"><b>Aucune dépense</b>Note tout ce que le business te coûte en plus des produits : pub, transport, livraison, emballage, crédit téléphone.</div>`; return; }
+  const list = [...S.data.depenses].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.cree||0) - (a.cree||0));
+  const tot = list.reduce((s,d) => s + (+d.montant||0), 0);
+  let h = `<div class="chip"><div class="label">Total des dépenses</div><div class="v num">${F(tot)}</div></div>`;
+  for (const d of list) h += `<div class="row">
+    <div><div class="t">${esc(d.libelle)}</div><div class="m">${esc(dayLabel(d.date))} · ${esc(d.categorie || "Autre")}</div></div>
+    <div class="amt num">${F(d.montant)}</div>
+    <div class="acts"><button class="mini danger" data-act="del" data-col="depenses" data-id="${d.id}">Supprimer</button></div>
+  </div>`;
+  el.innerHTML = h;
+}
+
+/* ================= Feuilles & formulaires ================= */
+function openSheet(html, onSubmit) {
+  const sh = $("#sheet");
+  sh.innerHTML = html; sh.hidden = false; $("#scrim").hidden = false;
+  const form = sh.querySelector("form");
+  if (form && onSubmit) form.addEventListener("submit", e => {
+    e.preventDefault();
+    try { onSubmit(new FormData(form)); closeSheet(); }
+    catch (err) { form.querySelector(".err").textContent = err.message || "Vérifie les champs."; }
+  });
+  sh.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", closeSheet));
+  return form || sh;
+}
+function closeSheet() { $("#sheet").hidden = true; $("#scrim").hidden = true; $("#sheet").innerHTML = ""; }
+$("#scrim").addEventListener("click", closeSheet);
+function toast(t) { const el = $("#toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 2200); }
+const buttons = `<div class="err"></div><div class="btns"><button type="button" class="btn sec" data-close>Annuler</button><button type="submit" class="btn pri">Enregistrer</button></div>`;
+
+function venteForm() {
+  if (!S.data.produits.length) { S.tab = "stock"; render(); produitForm(); return; }
+  const opts = S.data.produits.map(p => `<option value="${p.id}">${esc(p.nom)}</option>`).join("");
+  const form = openSheet(`<form><h2>Nouvelle vente</h2>
+    <div class="field"><label for="v-prod">Produit</label><select id="v-prod" name="produitId">${opts}</select></div>
+    <div class="two">
+      <div class="field"><label for="v-qte">Quantité</label><input id="v-qte" name="qte" type="number" inputmode="numeric" min="1" step="1" value="1" required></div>
+      <div class="field"><label for="v-prix">Prix / pièce (F)</label><input id="v-prix" name="prix" type="number" inputmode="numeric" min="0" step="1" required></div>
+    </div>
+    <div class="hint" id="v-hint"></div>
+    <div class="two">
+      <div class="field"><label for="v-date">Date</label><input id="v-date" name="date" type="date" value="${todayISO()}" required></div>
+      <div class="field"><label for="v-pay">Paiement</label><select id="v-pay" name="paiement">
+        <option>Wave</option><option>Orange Money</option><option>MTN MoMo</option><option>Moov Money</option><option>Espèces</option><option>Via le vendeur</option></select></div>
+    </div>
+    <div class="field"><label for="v-client">Client (facultatif)</label><input id="v-client" name="client" type="text" placeholder="Nom ou numéro"></div>
+    <label class="check"><input id="v-enc" name="encaisse" type="checkbox" checked> L'argent est déjà sur mon compte</label>
+    ${buttons}</form>`, fd => {
+      const qte = +fd.get("qte"), prix = +fd.get("prix");
+      if (!(qte > 0) || !(prix >= 0)) throw new Error("Quantité et prix doivent être des nombres positifs.");
+      db.ajouter("ventes", { produitId: fd.get("produitId"), qte, prix, date: fd.get("date"), paiement: fd.get("paiement"),
+        client: (fd.get("client")||"").trim(), encaisse: fd.get("encaisse") === "on", cree: Date.now() });
+      toast("Vente enregistrée");
+    });
+  const sync = () => {
+    const p = S.data.produits.find(x => x.id === form.produitId.value) || {};
+    const depot = p.mode === "depot";
+    form.prix.value = depot ? (+p.reverse || "") : (+p.prixVente || "");
+    form.paiement.value = depot ? "Via le vendeur" : "Wave";
+    form.encaisse.checked = !depot;
+    $("#v-hint").textContent = depot ? "Produit en dépôt : mets ce que le vendeur TE reverse, pas son prix de vente." : "";
+  };
+  form.produitId.addEventListener("change", sync); sync();
+}
+
+function produitForm(p) {
+  p = p || { mode: "stock" };
+  const form = openSheet(`<form><h2>${p.id ? "Modifier le produit" : "Nouveau produit"}</h2>
+    <div class="field"><label for="p-nom">Nom</label><input id="p-nom" name="nom" type="text" value="${esc(p.nom||"")}" required></div>
+    <div class="field"><label for="p-mode">Où est le produit ?</label><select id="p-mode" name="mode">
+      <option value="stock" ${p.mode!=="depot"?"selected":""}>Chez moi, je le vends moi-même</option>
+      <option value="depot" ${p.mode==="depot"?"selected":""}>Confié à un vendeur (dépôt-vente)</option></select></div>
+    <div class="two">
+      <div class="field"><label for="p-qte">Nombre de pièces</label><input id="p-qte" name="quantite" type="number" inputmode="numeric" min="0" step="1" value="${+p.quantite||""}"></div>
+      <div class="field"><label for="p-cout">Coût de revient / pièce (F)</label><input id="p-cout" name="cout" type="number" inputmode="numeric" min="0" step="1" value="${+p.cout||""}"></div>
+    </div>
+    <div class="hint">Coût de revient = (prix d'achat + transport + douane) ÷ nombre de pièces.</div>
+    <div class="two">
+      <div class="field"><label for="p-pv">Prix de vente public (F)</label><input id="p-pv" name="prixVente" type="number" inputmode="numeric" min="0" step="1" value="${+p.prixVente||""}"></div>
+      <div class="field" id="p-rev-f"><label for="p-rev">Le vendeur me reverse (F)</label><input id="p-rev" name="reverse" type="number" inputmode="numeric" min="0" step="1" value="${+p.reverse||""}"></div>
+    </div>
+    <div class="field" id="p-dep-f"><label for="p-dep">Nom du vendeur</label><input id="p-dep" name="depositaire" type="text" value="${esc(p.depositaire||"")}"></div>
+    <div class="field"><label for="p-note">Note (facultatif)</label><input id="p-note" name="note" type="text" value="${esc(p.note||"")}"></div>
+    ${buttons}</form>`, fd => {
+      const data = { nom: fd.get("nom").trim(), mode: fd.get("mode"), quantite: +fd.get("quantite") || 0, cout: +fd.get("cout") || 0,
+        prixVente: +fd.get("prixVente") || 0, reverse: +fd.get("reverse") || 0, depositaire: (fd.get("depositaire")||"").trim(), note: (fd.get("note")||"").trim() };
+      if (!data.nom) throw new Error("Donne un nom au produit.");
+      if (p.id) db.modifier("produits", p.id, data); else db.ajouter("produits", data);
+      toast(p.id ? "Produit mis à jour" : "Produit ajouté");
+    });
+  const sync = () => { const d = form.mode.value === "depot"; $("#p-rev-f").hidden = !d; $("#p-dep-f").hidden = !d; };
+  form.mode.addEventListener("change", sync); sync();
+}
+
+function depenseForm() {
+  openSheet(`<form><h2>Nouvelle dépense</h2>
+    <div class="field"><label for="d-lib">Pour quoi ?</label><input id="d-lib" name="libelle" type="text" placeholder="Ex. Pub Facebook, taxi Adjamé" required></div>
+    <div class="two">
+      <div class="field"><label for="d-mt">Montant (F)</label><input id="d-mt" name="montant" type="number" inputmode="numeric" min="0" step="1" required></div>
+      <div class="field"><label for="d-date">Date</label><input id="d-date" name="date" type="date" value="${todayISO()}" required></div>
+    </div>
+    <div class="field"><label for="d-cat">Catégorie</label><select id="d-cat" name="categorie">
+      <option>Publicité</option><option>Transport</option><option>Livraison</option><option>Emballage</option><option>Crédit / Internet</option><option>Autre</option></select></div>
+    ${buttons}</form>`, fd => {
+      db.ajouter("depenses", { libelle: fd.get("libelle").trim(), montant: +fd.get("montant") || 0, date: fd.get("date"), categorie: fd.get("categorie"), cree: Date.now() });
+      toast("Dépense enregistrée");
+    });
+}
+
+/* ================= Sauvegarde : fichier JSON ================= */
+function sauvegardeSheet() {
+  const j = joursDepuis(S.data.derniereSauvegarde);
+  openSheet(`<div class="inner"><h2>Sauvegarde</h2>
+    <p class="note">Tes données sont enregistrées sur cet appareil, dans la mémoire de l'appli. Elles restent même sans internet et après fermeture.</p>
+    <div class="box num">
+      <div><b>${S.data.produits.length}</b> produits · <b>${S.data.ventes.length}</b> ventes · <b>${S.data.depenses.length}</b> dépenses</div>
+      <div class="note">Dernière sauvegarde : ${j === null ? "jamais" : j === 0 ? "aujourd'hui" : "il y a " + j + " jour" + (j > 1 ? "s" : "")}</div>
+    </div>
+    <p class="note">Sauvegarde au moins une fois par semaine et envoie le fichier sur ton Google Drive ou à toi-même sur WhatsApp. Si tu perds ton téléphone, ce fichier te permet de tout récupérer.</p>
+    <button class="btn pri" data-act="exporter">Sauvegarder dans un fichier</button>
+    <button class="btn sec" data-act="importer">Restaurer depuis un fichier</button>
+    <p class="hint">Restaurer sert aussi à copier tes données sur un autre appareil : sauvegarde sur l'un, restaure sur l'autre.</p>
+    <button class="btn sec" data-close>Fermer</button>
+  </div>`);
+}
+
+function nomFichier() { return "cahier-de-caisse-" + todayISO() + ".json"; }
+async function exporter() {
+  const contenu = JSON.stringify({ app: "cahier-de-caisse", exporte: new Date().toISOString(), ...S.data, derniereSauvegarde: Date.now() }, null, 2);
+  const fichier = new File([contenu], nomFichier(), { type: "application/json" });
+  const mobile = matchMedia("(pointer: coarse)").matches;
+  if (mobile && navigator.canShare && navigator.canShare({ files: [fichier] })) {
+    try { await navigator.share({ files: [fichier], title: "Sauvegarde Cahier de Caisse" }); marquerSauvegarde(); return; }
+    catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  const url = URL.createObjectURL(fichier);
+  const a = document.createElement("a"); a.href = url; a.download = fichier.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  marquerSauvegarde();
+}
+function marquerSauvegarde() { S.data.derniereSauvegarde = Date.now(); enregistrer(); render(); closeSheet(); toast("Sauvegarde créée"); }
+
+$("#import-file").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  let d;
+  try { d = JSON.parse(await f.text()); } catch { toast("Ce fichier n'est pas une sauvegarde valide."); return; }
+  if (!valide(d)) { toast("Ce fichier n'est pas une sauvegarde du Cahier de Caisse."); return; }
+  const quand = d.exporte ? new Date(d.exporte).toLocaleDateString("fr-FR", {day:"numeric", month:"long", year:"numeric"}) : "date inconnue";
+  openSheet(`<div class="inner"><h2>Restaurer cette sauvegarde ?</h2>
+    <div class="box num"><div>Sauvegarde du <b>${esc(quand)}</b></div>
+      <div><b>${d.produits.length}</b> produits · <b>${d.ventes.length}</b> ventes · <b>${d.depenses.length}</b> dépenses</div></div>
+    <p class="note">Les données actuelles de cet appareil (${S.data.ventes.length} ventes, ${S.data.depenses.length} dépenses) seront remplacées.</p>
+    <div class="btns"><button class="btn sec" data-close>Annuler</button><button class="btn warn" id="confirm-import">Remplacer</button></div>
+  </div>`);
+  $("#confirm-import").addEventListener("click", () => {
+    S.data = { format: FORMAT, cree: d.cree || Date.now(), modifie: Date.now(), derniereSauvegarde: d.derniereSauvegarde || Date.now(),
+      produits: d.produits, ventes: d.ventes, depenses: d.depenses };
+    enregistrer(); closeSheet(); render(); toast("Données restaurées");
+  });
+});
+
+/* ================= Événements ================= */
+document.querySelector("nav.tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.tab = b.dataset.tab; render(); window.scrollTo(0, 0); });
+$("#fab").addEventListener("click", () => S.tab === "depenses" ? depenseForm() : S.tab === "stock" ? produitForm() : venteForm());
+$("#btn-save").addEventListener("click", sauvegardeSheet);
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const id = b.dataset.id, act = b.dataset.act;
+  if (act === "exporter") return exporter();
+  if (act === "importer") return $("#import-file").click();
+  if (act === "toggle") { const v = S.data.ventes.find(x => x.id === id); if (v) db.modifier("ventes", id, { encaisse: !v.encaisse }); return; }
+  if (act === "edit") return produitForm(S.data.produits.find(x => x.id === id));
+  if (act === "del") {
+    if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Confirmer"; setTimeout(() => { if (b.isConnected) { b.classList.remove("armed"); b.textContent = "Supprimer"; } }, 3500); return; }
+    db.supprimer(b.dataset.col, id); toast("Supprimé");
+  }
+});
+
+render();
+
+/* Hors connexion : le service worker garde l'appli en mémoire après la première ouverture */
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
