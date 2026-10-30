@@ -33,9 +33,17 @@ function venteForm(v) {
     <div class="two">
       <div class="field"><label for="v-qte">Quantité</label><input id="v-qte" name="qte" type="number" inputmode="numeric" min="1" step="1" value="${+v.qte || 1}" required></div>
       <div class="field" data-pour="depot"><label for="v-pc">Prix payé par le client (F/pièce)</label><input id="v-pc" name="prixClient" type="number" inputmode="numeric" min="0" step="1" value="${edit && v.prixClient ? +v.prixClient : ""}"></div>
-      <div class="field"><label for="v-prix" id="v-prix-lab">Prix / pièce (F)</label><input id="v-prix" name="prix" type="number" inputmode="numeric" min="0" step="1" value="${edit ? +v.prix : ""}" required></div>
+      <div class="field" data-pour="direct"><label for="v-prix" id="v-prix-lab">Prix / pièce (F)</label><input id="v-prix" name="prix" type="number" inputmode="numeric" min="0" step="any" value="${edit ? +v.prix : ""}" required></div>
     </div>
-    <div class="calc num" id="v-calc" hidden></div>
+    <div class="box" data-pour="depot" id="v-partage">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><b>Partage du bénéfice</b><span class="num" id="v-benef"></span></div>
+      <div class="two">
+        <div class="field"><label for="v-ma">Ta part (F)</label><input id="v-ma" name="maPart" type="number" inputmode="numeric" step="1"></div>
+        <div class="field"><label for="v-sa" id="v-sa-lab">Sa part (F)</label><input id="v-sa" name="saPart" type="number" inputmode="numeric" step="1"></div>
+      </div>
+      <div class="note num" id="v-calc"></div>
+      <div><button type="button" class="mini" id="v-regle" hidden>Revenir à la règle</button></div>
+    </div>
     <div class="hint" id="v-hint"></div>
     <div class="two">
       <div class="field"><label for="v-date">Date</label><input id="v-date" name="date" type="date" value="${v.date || todayISO()}" required></div>
@@ -66,7 +74,7 @@ function venteForm(v) {
       const p = produitDe(fd.get("produitId"));
       const depot = p.mode === "depot";
       const data = { produitId: p.id, qte, prix, date: fd.get("date") };
-      if (depot) Object.assign(data, { vendeurId: p.vendeurId, prixClient: +fd.get("prixClient") || 0, paiement: "Via le vendeur", client: "", tel: "", encaisse: false });
+      if (depot) Object.assign(data, { vendeurId: p.vendeurId, prixClient: +fd.get("prixClient") || 0, paiement: "Via le vendeur", client: "", tel: "", encaisse: false, ajuste: etatPartage.ajuste || undefined });
       else Object.assign(data, { vendeurId: undefined, prixClient: undefined, paiement: fd.get("paiement"), client: (fd.get("client")||"").trim(), tel: (fd.get("tel")||"").trim(), encaisse: fd.get("encaisse") === "on" });
       data.coutU = edit && v.produitId === data.produitId && p.mode !== "numerique" ? +v.coutU || 0 : coutVente(p, prix);
       if (!depot && p.mode !== "numerique" && fd.get("livrer") === "on") {
@@ -78,32 +86,48 @@ function venteForm(v) {
       if (edit) { db.modifier("ventes", v.id, data); toast("Vente modifiée"); }
       else { db.ajouter("ventes", { ...data, cree: Date.now() }); toast(depot ? "Vente du vendeur enregistrée" : "Vente enregistrée"); }
     });
-  let prixTouche = edit;
+  /* Partage d'une vente du vendeur : la règle propose, tu peux ajuster ta part OU la sienne, l'autre se calcule */
+  const etatPartage = { cote: null, modifie: false, ajuste: !!v.ajuste };
   const calc = () => {
     const p = produitDe(form.produitId.value) || {};
     if (p.mode !== "depot") return;
     const vd = vendeurDe(p.vendeurId), pc = +form.prixClient.value || 0, q = +form.qte.value || 1;
-    if (!vd) return;
-    if (!prixTouche) form.prix.value = reverse(vd, p, pc);
-    const du = +form.prix.value || 0;
-    $("#v-calc").hidden = false;
-    $("#v-calc").innerHTML = `Le client paie ${F(pc * q)}. ${esc(vd.nom)} te doit <b>${F(du * q)}</b> et garde ${F((pc - du) * q)}.<br><span class="note">Ton bénéfice : ${F((du - (+p.cout || 0)) * q)} · règle : ${esc(resumeRegle(vd))}</span>`;
+    if (!vd) { $("#v-calc").textContent = "Ce produit n'a plus de vendeur : modifie-le dans l'onglet Stock."; return; }
+    const def = partageCalc(vd, p, pc, q);
+    let ma, sa;
+    if (etatPartage.cote === "moi") { ma = +form.maPart.value || 0; sa = def.benefice - ma; form.saPart.value = Math.round(sa); }
+    else if (etatPartage.cote === "lui") { sa = +form.saPart.value || 0; ma = def.benefice - sa; form.maPart.value = Math.round(ma); }
+    else { ma = def.maPart; sa = def.saPart; form.maPart.value = Math.round(ma); form.saPart.value = Math.round(sa); }
+    const du = def.rembourse + ma;
+    form.prix.value = q ? du / q : 0;
+    if (etatPartage.modifie) etatPartage.ajuste = etatPartage.cote !== null && Math.abs(ma - def.maPart) >= 1;
+    $("#v-benef").textContent = "Bénéfice " + F(def.benefice);
+    $("#v-sa-lab").textContent = "Part de " + vd.nom + " (F)";
+    $("#v-regle").hidden = !etatPartage.ajuste;
+    $("#v-calc").innerHTML = `${esc(vd.nom)} te doit <b>${F(du)}</b>${def.rembourse ? " (ton coût " + F(def.rembourse) + " + ta part)" : ""} et garde ${F(pc * q - du)}.`
+      + (etatPartage.ajuste ? `<br><span class="tag gold">Ajusté</span> La règle donnait ${F(def.maPart)} pour toi et ${F(def.saPart)} pour lui.` : `<br>Règle : ${esc(resumeRegle(vd))}.`)
+      + `<br>Ton bénéfice réel : <b>${F(du - (+p.cout || 0) * q)}</b>.`
+      + (ma < 0 || sa < 0 ? `<br><span style="color:var(--red)">Attention : une des deux parts est négative.</span>` : "");
   };
   const sync = (init) => {
     const p = produitDe(form.produitId.value) || {};
     const depot = p.mode === "depot", num = p.mode === "numerique", chariow = num && p.plateforme === "chariow";
     form.querySelectorAll("[data-pour]").forEach(x => x.hidden = x.dataset.pour === "depot" ? !depot : x.dataset.pour === "livrable" ? (depot || num) : depot);
     $("#v-liv-f").hidden = depot || num || !form.livrer.checked;
-    $("#v-calc").hidden = !depot;
-    $("#v-prix-lab").textContent = depot ? "Il te doit (F/pièce)" : "Prix / pièce (F)";
+    form.prix.required = !depot;
+    if (init && edit && depot) {
+      /* reprend le partage enregistré */
+      const p0 = produitDe(v.produitId), vd0 = vendeurDe(v.vendeurId);
+      if (p0 && vd0) { const r0 = partageCalc(vd0, p0, v.prixClient, v.qte, totalVente(v)); form.maPart.value = Math.round(r0.maPart); etatPartage.cote = "moi"; }
+    }
     if (!(init && edit)) {
-      prixTouche = false;
+      etatPartage.cote = null; etatPartage.modifie = false; etatPartage.ajuste = false;
       if (depot) { form.prixClient.value = +p.prixVente || ""; }
       else form.prix.value = +p.prixVente || "";
       form.paiement.value = chariow ? "Chariow" : "Wave";
       form.encaisse.checked = !chariow;
     }
-    $("#v-hint").textContent = depot ? "Vente faite par ton vendeur : mets le prix réel payé par le client. L'appli calcule ce qu'il te doit selon sa règle. Tu peux corriger le montant si vous vous êtes arrangés autrement."
+    $("#v-hint").textContent = depot ? "Vente faite par ton vendeur : mets le prix réel payé par le client. L'appli partage le bénéfice selon votre règle. Pour un autre accord, change ta part ou la sienne : l'autre se calcule toute seule."
       : chariow ? "Vente Chariow : mets le prix payé par le client, l'appli retire la commission. Chariow te verse l'argent environ 72 h après : coche « Encaissé » quand tu l'as reçu. Plusieurs ventes le même jour ? Une seule ligne avec la quantité suffit."
       : num ? "Produit numérique : après l'enregistrement, envoie le reçu avec le lien depuis l'onglet Ventes." : "";
     majEnc(); calc();
@@ -113,9 +137,11 @@ function venteForm(v) {
   form.livrer.addEventListener("change", () => { $("#v-liv-f").hidden = !form.livrer.checked; if (form.livrer.checked && !edit) form.encaisse.checked = false; majEnc(); });
   form.livreur.addEventListener("change", () => { const l = livreursConnus().find(x => x.nom.toLowerCase() === form.livreur.value.trim().toLowerCase()); if (l && l.tel && !form.telLivreur.value) form.telLivreur.value = l.tel; });
   form.paiement.addEventListener("change", majEnc);
-  form.prixClient.addEventListener("input", () => { prixTouche = false; calc(); });
-  form.qte.addEventListener("input", calc);
-  form.prix.addEventListener("input", () => { prixTouche = true; calc(); });
+  form.prixClient.addEventListener("input", () => { etatPartage.modifie = true; calc(); });
+  form.qte.addEventListener("input", () => { etatPartage.modifie = true; calc(); });
+  form.maPart.addEventListener("input", () => { etatPartage.cote = "moi"; etatPartage.modifie = true; calc(); });
+  form.saPart.addEventListener("input", () => { etatPartage.cote = "lui"; etatPartage.modifie = true; calc(); });
+  $("#v-regle").addEventListener("click", () => { etatPartage.cote = null; etatPartage.modifie = true; etatPartage.ajuste = false; calc(); });
   sync(true);
   form.client.addEventListener("change", () => {
     const c = connus.find(x => x.nom.toLowerCase() === form.client.value.trim().toLowerCase());
@@ -128,7 +154,7 @@ function produitForm(p, modele) {
   p = p || Object.assign({ mode: "stock", seuil: 2 }, modele || {});
   const cats = [...new Set(S.data.produits.map(x => x.categorie).filter(Boolean))].sort();
   const noms = [...new Set(S.data.produits.map(x => x.nom))].sort();
-  const vOpts = S.data.vendeurs.map(vd => opt(vd.id, vd.nom + " · " + resumeRegle(vd), vd.id === p.vendeurId)).join("") + opt("__nouveau", "+ Nouveau vendeur…", false);
+  const vOpts = vendeursActifs().map(vd => opt(vd.id, vd.nom + " · " + resumeRegle(vd), vd.id === p.vendeurId)).join("") + opt("__nouveau", "+ Nouveau vendeur…", false);
   const form = openSheet(`<form><h2>${edit ? "Modifier le produit" : modele ? "Nouvelle variante" : "Nouveau produit"}</h2>
     ${modele ? `<p class="note">Une variante, c'est le même produit dans un autre modèle, une autre couleur, une autre taille ou à un autre prix. Elle a son propre stock.</p>` : ""}
     <div class="two">
@@ -256,7 +282,7 @@ function produitForm(p, modele) {
   $("#p-photo").addEventListener("change", () => { const f = $("#p-photo").files[0]; if (f) { const im = $("#p-photo-apercu"); im.src = URL.createObjectURL(f); im.hidden = false; } });
   form.vendeurId.addEventListener("change", sync);
   if (!edit && !modele) { form.plateforme.value = "chariow"; form.commission.value = 15; }
-  if (!S.data.vendeurs.length) form.vendeurId.value = "__nouveau";
+  if (!vendeursActifs().length) form.vendeurId.value = "__nouveau";
   /* Auto-complète la catégorie quand on choisit un nom de produit existant */
   form.nom.addEventListener("change", () => {
     const x = S.data.produits.find(y => norm(y.nom) === norm(form.nom.value));
@@ -297,47 +323,88 @@ function vendeurForm(vd) {
       <div class="field"><label for="w-nom">Nom</label><input id="w-nom" name="nom" type="text" value="${esc(vd.nom || "")}" required></div>
       <div class="field"><label for="w-tel">Téléphone</label><input id="w-tel" name="tel" type="tel" inputmode="tel" placeholder="07 00 00 00 00" value="${esc(vd.tel || "")}"></div>
     </div>
-    <div class="field"><label for="w-mode">Comment il te reverse l'argent</label><select id="w-mode" name="mode">${Object.entries(REGLES).map(([k, l]) => opt(k, l, k === vd.mode)).join("")}</select></div>
-    <div class="field" id="w-pct-f"><label for="w-pct" id="w-pct-lab">Ta part du bénéfice (%)</label><input id="w-pct" name="pct" type="number" inputmode="decimal" min="0" max="100" step="1" value="${+vd.pct || ""}"></div>
+    <div class="field"><label for="w-mode">Votre accord</label><select id="w-mode" name="mode">${Object.entries(REGLES).map(([k, l]) => opt(k, l, k === vd.mode)).join("")}</select></div>
+    <div class="two" id="w-pct-f">
+      <div class="field"><label for="w-pct">Ta part du bénéfice (%)</label><input id="w-pct" name="pct" type="number" inputmode="decimal" min="0" max="100" step="1" value="${vd.pct ?? 50}"></div>
+      <div class="field"><label for="w-pct2">Sa part du bénéfice (%)</label><input id="w-pct2" type="number" inputmode="decimal" min="0" max="100" step="1" value="${100 - (vd.pct ?? 50)}"></div>
+    </div>
+    <div class="field" id="w-mt-f"><label for="w-mt">Il garde par pièce vendue (F)</label><input id="w-mt" name="montant" type="number" inputmode="numeric" min="0" step="1" value="${+vd.montant || ""}" placeholder="Ex. 1000"></div>
     <div class="box" id="w-ex-f">
       <div class="note">Exemple pour vérifier :</div>
       <div class="two">
-        <div class="field"><label for="w-ex-c">Une paire qui te coûte (F)</label><input id="w-ex-c" type="number" inputmode="numeric" value="2000"></div>
-        <div class="field"><label for="w-ex-p">vendue au client (F)</label><input id="w-ex-p" type="number" inputmode="numeric" value="3500"></div>
+        <div class="field"><label for="w-ex-c">Une pièce qui te coûte (F)</label><input id="w-ex-c" type="number" inputmode="numeric" value="2000"></div>
+        <div class="field"><label for="w-ex-p">vendue au client (F)</label><input id="w-ex-p" type="number" inputmode="numeric" value="10000"></div>
       </div>
       <div class="calc num" id="w-ex"></div>
     </div>
     <div class="hint" id="w-hint"></div>
+    <p class="hint">C'est la règle par défaut. Pour un accord différent sur une vente, tu ajustes directement ta part ou la sienne au moment de la vente.</p>
     ${edit ? `<label class="check"><input name="retro" type="checkbox"> Recalculer ses ventes déjà notées avec cette règle</label>
-      <div class="hint">Laisse décoché si la nouvelle règle ne vaut que pour les prochaines ventes.</div>` : ""}
-    ${buttons}</form>`, fd => {
-      const data = { nom: fd.get("nom").trim(), tel: (fd.get("tel") || "").trim(), mode: fd.get("mode"), pct: Math.min(100, Math.max(0, +fd.get("pct") || 0)) };
+      <div class="hint">Laisse décoché si la nouvelle règle ne vaut que pour les prochaines ventes. Les ventes que tu as ajustées à la main ne changent pas.</div>` : ""}
+    ${buttons}
+    ${edit ? `<button type="button" class="btn sec" style="color:var(--red)" data-act="suppr-vendeur" data-id="${vd.id}">Supprimer ce vendeur</button>` : ""}
+  </form>`, fd => {
+      const data = { nom: fd.get("nom").trim(), tel: (fd.get("tel") || "").trim(), mode: fd.get("mode"),
+        pct: Math.min(100, Math.max(0, +fd.get("pct") || 0)), montant: Math.max(0, +fd.get("montant") || 0) };
       if (!data.nom) throw new Error("Donne un nom au vendeur.");
+      if (data.mode === "commission" && !data.montant) throw new Error("Indique combien il garde par pièce.");
       if (edit) {
         const ops = [];
-        if (fd.get("retro") === "on") for (const v of S.data.ventes) if (v.vendeurId === vd.id && v.prixClient) { const p = produitDe(v.produitId); if (p) ops.push({ type: "modif", col: "ventes", id: v.id, data: { prix: reverse(data, p, v.prixClient) } }); }
+        if (fd.get("retro") === "on") for (const v of S.data.ventes) if (v.vendeurId === vd.id && v.prixClient && !v.ajuste) { const p = produitDe(v.produitId); if (p) ops.push({ type: "modif", col: "ventes", id: v.id, data: { prix: reverse(data, p, v.prixClient) } }); }
         ops.push({ type: "modif", col: "vendeurs", id: vd.id, data });
         db.appliquer(ops); toast("Vendeur mis à jour");
       } else { db.ajouter("vendeurs", data); toast("Vendeur ajouté"); }
     });
   const maj = () => {
     const m = form.mode.value, pct = +form.pct.value || 0, c = +$("#w-ex-c").value || 0, p = +$("#w-ex-p").value || 0;
-    $("#w-pct-f").hidden = m === "fixe"; $("#w-ex-f").hidden = m === "fixe";
+    $("#w-pct-f").hidden = !(m === "cout+part" || m === "part");
+    $("#w-mt-f").hidden = m !== "commission";
+    $("#w-ex-f").hidden = m === "fixe";
     $("#w-hint").textContent = m === "fixe" ? "Le montant fixe se règle sur chaque produit confié (champ « Il me reverse »)." :
-      m === "cout+part" ? "Il te rend d'abord ce que la pièce t'a coûté, puis vous partagez le bénéfice : ta part en %, le reste pour lui." :
-      "Il te donne seulement un pourcentage du bénéfice. Attention : avec cette règle, ton coût d'achat n'est pas remboursé à part.";
-    const r = reverse({ mode: m, pct }, { cout: c }, p), benef = p - c;
-    $("#w-ex").innerHTML = `Bénéfice ${F(benef)} → il te doit <b>${F(r)}</b>, il garde ${F(p - r)}.<br>Ton bénéfice réel : <b>${F(r - c)}</b>.`;
+      m === "cout+part" ? "Il te rend d'abord ce que la pièce t'a coûté, puis vous partagez le bénéfice." :
+      m === "commission" ? "Quel que soit le prix de vente, il garde ce montant par pièce et te donne tout le reste." :
+      "Il te donne seulement un pourcentage du bénéfice. Attention : ton coût d'achat n'est pas remboursé à part.";
+    const r = partageCalc({ mode: m, pct, montant: +form.montant.value || 0 }, { cout: c, vendeurVoitCout: true }, p, 1);
+    $("#w-ex").innerHTML = `Bénéfice ${F(r.benefice)} : <b>${F(r.maPart)} pour toi</b> · <b>${F(r.saPart)} pour lui</b>.<br>Il te doit ${F(r.du)}${r.rembourse ? " (ton coût " + F(r.rembourse) + " + ta part)" : ""} et garde ${F(r.garde)}.`;
   };
-  ["#w-mode", "#w-pct", "#w-ex-c", "#w-ex-p"].forEach(s => $(s).addEventListener("input", maj));
+  /* Les deux pourcentages restent liés : 40 % pour toi = 60 % pour lui */
+  form.pct.addEventListener("input", () => { form.querySelector("#w-pct2").value = Math.max(0, 100 - (+form.pct.value || 0)); maj(); });
+  $("#w-pct2").addEventListener("input", () => { form.pct.value = Math.max(0, 100 - (+$("#w-pct2").value || 0)); maj(); });
+  ["#w-mode", "#w-mt", "#w-ex-c", "#w-ex-p"].forEach(x => $(x).addEventListener("input", maj));
   maj();
 }
 
+/* Supprimer un vendeur : ses produits reviennent chez toi ou passent à un autre vendeur ; son historique reste dans ton bilan */
+function supprimerVendeurSheet(vd) {
+  const c = compteVendeur(vd, "tout");
+  const confies = S.data.produits.filter(p => p.mode === "depot" && p.vendeurId === vd.id);
+  const autres = vendeursActifs().filter(x => x.id !== vd.id);
+  const aHistorique = S.data.ventes.some(v => v.vendeurId === vd.id) || S.data.versements.some(x => x.vendeurId === vd.id);
+  openSheet(`<div class="inner"><h2>Supprimer ${esc(vd.nom)} ?</h2>
+    ${c.solde > 0 ? `<div class="banner red"><span>Il te doit encore <b>${F(c.solde)}</b>. Après la suppression, ce montant ne sera plus suivi. Si tu as reçu de l'argent, enregistre d'abord le versement.</span></div>` : ""}
+    ${confies.length ? `<div class="field"><label for="sv-dest">Que faire de ses ${plur(c.piecesChezLui, "pièce")} (${plur(confies.length, "produit")}) ?</label>
+      <select id="sv-dest">${opt("__moi", "Les reprendre chez moi", true)}${autres.map(x => opt(x.id, "Les confier à " + x.nom, false)).join("")}</select></div>` : ""}
+    <p class="note">${aHistorique ? "Ses ventes passées restent dans ton bilan et ton historique : c'est de l'argent réellement gagné." : "Il n'a encore aucune vente ni aucun versement."}${vd.uid ? " Son accès à l'appli sera retiré." : ""}</p>
+    <div class="err"></div>
+    <div class="btns"><button class="btn sec" data-close>Annuler</button><button class="btn warn" id="sv-ok">Supprimer</button></div></div>`);
+  $("#sv-ok").addEventListener("click", async () => {
+    const bt = $("#sv-ok"); bt.disabled = true;
+    try {
+      if (vd.uid && typeof Cloud !== "undefined" && Cloud.retirerAccesVendeur) await Cloud.retirerAccesVendeur(vd);
+      const dest = $("#sv-dest") ? $("#sv-dest").value : "__moi";
+      const ops = confies.map(p => ({ type: "modif", col: "produits", id: p.id, data: dest === "__moi" ? { mode: "stock", vendeurId: undefined, vendeurVoitCout: false } : { vendeurId: dest } }));
+      ops.push(aHistorique ? { type: "modif", col: "vendeurs", id: vd.id, data: { supprime: true, uid: undefined } } : { type: "suppr", col: "vendeurs", id: vd.id });
+      db.appliquer(ops); closeSheet(); toast(vd.nom + " supprimé");
+    } catch (x) { $(".sheet .err").textContent = typeof Cloud !== "undefined" ? Cloud.messageErreur(x) : "Suppression impossible."; bt.disabled = false; }
+  });
+}
+ACTIONS["suppr-vendeur"] = id => supprimerVendeurSheet(vendeurDe(id));
+
 function versementForm(vdId) {
-  if (!S.data.vendeurs.length) { vendeurForm(); return; }
-  const vd0 = vendeurDe(vdId) || S.data.vendeurs.map(vd => ({ vd, s: compteVendeur(vd, "tout").solde })).sort((a, b) => b.s - a.s)[0].vd;
+  if (!vendeursActifs().length) { vendeurForm(); return; }
+  const vd0 = vendeurDe(vdId) || vendeursActifs().map(vd => ({ vd, s: compteVendeur(vd, "tout").solde })).sort((a, b) => b.s - a.s)[0].vd;
   const form = openSheet(`<form><h2>Versement reçu</h2>
-    <div class="field"><label for="x-vd">De qui ?</label><select id="x-vd" name="vendeurId">${S.data.vendeurs.map(vd => opt(vd.id, vd.nom, vd.id === vd0.id)).join("")}</select></div>
+    <div class="field"><label for="x-vd">De qui ?</label><select id="x-vd" name="vendeurId">${vendeursActifs().map(vd => opt(vd.id, vd.nom, vd.id === vd0.id)).join("")}</select></div>
     <div class="two">
       <div class="field"><label for="x-mt">Montant reçu (F)</label><input id="x-mt" name="montant" type="number" inputmode="numeric" min="1" step="1" required></div>
       <div class="field"><label for="x-date">Date</label><input id="x-date" name="date" type="date" value="${todayISO()}" required></div>

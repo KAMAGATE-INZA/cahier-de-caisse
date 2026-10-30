@@ -57,15 +57,15 @@ service cloud.firestore {
           let d = request.resource.data;
           return d.vendeurUid == moi() && d.auteur == "vendeur" && d.vendeurId == monVendeurId()
             && d.qte is int && d.qte > 0 && d.prix is number && d.prix >= 0
-            && d.cree is int && produitAMoi(d.produitId) && !("coutU" in d);
+            && d.cree is int && produitAMoi(d.produitId) && !("coutU" in d) && !("ajuste" in d);
         }
         allow read: if membre() && resource.data.vendeurUid == moi();
         allow create: if membre() && venteValide()
           && request.resource.data.cree > request.time.toMillis() - 86400000;
-        allow update: if membre() && resource.data.vendeurUid == moi() && resource.data.auteur == "vendeur"
+        allow update: if membre() && resource.data.vendeurUid == moi() && resource.data.auteur == "vendeur" && !("ajuste" in resource.data)
           && request.time.toMillis() - resource.data.cree < 86400000
           && venteValide() && request.resource.data.cree == resource.data.cree;
-        allow delete: if membre() && resource.data.vendeurUid == moi() && resource.data.auteur == "vendeur"
+        allow delete: if membre() && resource.data.vendeurUid == moi() && resource.data.auteur == "vendeur" && !("ajuste" in resource.data)
           && request.time.toMillis() - resource.data.cree < 86400000;
       }
       // Ses versements : il les lit et peut déclarer un envoi, que le propriétaire confirme

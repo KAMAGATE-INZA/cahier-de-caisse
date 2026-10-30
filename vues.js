@@ -85,8 +85,8 @@ function renderBilan(st) {
       <button class="chip" data-goto="stock"><div class="label">Valeur du stock</div><div class="v num">${F(tout.valeurStock)}</div><div class="note num">${plur(tout.piecesStock, "pièce")} · voir le détail</div></button>
     </div>`;
 
-  if (S.data.vendeurs.length) {
-    const lignes = S.data.vendeurs.map(vd => ({ vd, c: compteVendeur(vd, S.periode) }));
+  if (vendeursActifs().length) {
+    const lignes = vendeursActifs().map(vd => ({ vd, c: compteVendeur(vd, S.periode) }));
     const verseP = lignes.reduce((s, x) => s + x.c.verseP, 0);
     h += `<button class="card link" data-goto="vendeurs" style="text-align:left;width:100%">
       <div class="head"><span class="label">Tes vendeurs · ${esc(nomPeriode(S.periode))}</span><span class="note">voir le détail</span></div>
@@ -230,7 +230,9 @@ function renderVentes() {
         + (v.livraison && v.livraison.statut !== "livree" ? ` <span class="tag violet">${STATUTS_LIV[v.livraison.statut]}</span>` : "")
         + (v.auteur === "vendeur" ? ` <span class="tag">Ajoutée par le vendeur</span>` : "");
     const pAttendu = depot && v.auteur === "vendeur" && vd && produitDe(v.produitId) ? reverse(vd, produitDe(v.produitId), v.prixClient) : null;
-    const aVerifier = pAttendu !== null && Math.abs(pAttendu - (+v.prix || 0)) > 1;
+    const aVerifier = !v.ajuste && pAttendu !== null && Math.abs(pAttendu - (+v.prix || 0)) > 1;
+    const pv = depot ? partageVente(v) : null;
+    const lignePartage = pv ? `<br>Bénéfice ${F(pv.benefice)} : toi ${F(pv.maPart)} · ${esc(vd ? vd.nom : "lui")} ${F(pv.saPart)}${v.ajuste ? ` <span class="tag gold">ajusté</span>` : ""}` : "";
     let actions = "";
     if (depot) actions = `<button class="mini" data-act="releve" data-id="${v.vendeurId}">Compte de ${esc(vd ? vd.nom : "vendeur")}</button>`;
     else {
@@ -240,7 +242,7 @@ function renderVentes() {
         : `<a class="mini wa" href="${lienWa(v.tel, v.encaisse ? texteRecu(v) : texteRelance(v))}" target="_blank" rel="noopener">${v.encaisse ? "Envoyer le reçu" : "Relancer"}</a>`;
     }
     h += `<div class="row compact${S.ouvert === v.id ? " open" : ""}" data-row="${v.id}" tabindex="0" aria-expanded="${S.ouvert === v.id}">
-      <div><div class="t">${esc(nomProduit(v.produitId))} × ${+v.qte}</div><div class="m">${meta}${aVerifier ? ` <span class="tag red">À vérifier : selon ta règle il te doit ${F(pAttendu)}/pièce</span>` : ""}</div></div>
+      <div><div class="t">${esc(nomProduit(v.produitId))} × ${+v.qte}</div><div class="m">${meta}${lignePartage}${aVerifier ? ` <span class="tag red">À vérifier : selon ta règle il te doit ${F(pAttendu)}/pièce</span>` : ""}</div></div>
       <div class="amt num">${F(totalVente(v))}<div class="m">${beneficeVente(v) >= 0 ? "+" : "−"}${F(Math.abs(beneficeVente(v)))}</div></div>
       <div class="acts">${actions}
         <button class="mini" data-act="edit-vente" data-id="${v.id}">Modifier</button>
@@ -371,12 +373,12 @@ function renderStock(st) {
 /* ---------- Vendeurs ---------- */
 function renderVendeurs() {
   const el = $("#v-vendeurs");
-  if (!S.data.vendeurs.length) {
+  if (!vendeursActifs().length) {
     el.innerHTML = `<div class="empty"><b>Aucun vendeur</b>Si tu confies des produits à quelqu'un qui les vend pour toi, ajoute-le ici. Tu choisis comment il te reverse l'argent (ton coût + une part du bénéfice, un pourcentage, ou un montant fixe) et l'appli calcule ce qu'il te doit.</div>
       <button class="btn pri" data-act="nouveau-vendeur">Ajouter un vendeur</button>`;
     return;
   }
-  const lignes = S.data.vendeurs.map(vd => ({ vd, c: compteVendeur(vd, S.periode) }));
+  const lignes = vendeursActifs().map(vd => ({ vd, c: compteVendeur(vd, S.periode) }));
   const verseP = lignes.reduce((s, x) => s + x.c.verseP, 0), duP = lignes.reduce((s, x) => s + x.c.duP, 0);
   const solde = lignes.reduce((s, x) => s + Math.max(0, x.c.solde), 0);
   let h = segPeriode() + `<div class="chips">
@@ -395,7 +397,7 @@ function renderVendeurs() {
         <div><span class="note">Dû pour la période</span><b>${F(c.duP)}</b></div>
         <div><span class="note">Versé</span><b>${F(c.verseP)}</b></div>
       </div>
-      <div class="note num">${esc(nomPeriode(S.periode))} : ${c.caClientP ? "les clients ont payé " + F(c.caClientP) + ", " : ""}ton bénéfice sur ses ventes est de ${F(c.benefP)}. Encore chez lui : ${plur(c.piecesChezLui, "pièce")} (${F(c.valeurChezLui)}).</div>
+      <div class="note num">${esc(nomPeriode(S.periode))} : ${c.caClientP ? "les clients ont payé " + F(c.caClientP) + ", " : ""}ton bénéfice sur ses ventes est de ${F(c.benefP)}, lui a gagné ${F(c.gainP)}. Encore chez lui : ${plur(c.piecesChezLui, "pièce")} (${F(c.valeurChezLui)}).</div>
       <div class="btns" style="flex-wrap:wrap">
         <button class="mini wa" data-act="versement" data-id="${vd.id}">+ Versement reçu</button>
         <button class="mini" data-act="releve" data-id="${vd.id}">Relevé</button>

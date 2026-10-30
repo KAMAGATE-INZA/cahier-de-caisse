@@ -271,7 +271,7 @@ function abonnerVendeur() {
         const obj = propre(S.data[o.col].find(x => x.id === o.id) || {});
         if (!obj.id) continue;
         obj.vendeurUid = u; obj.vendeurId = C.vendeurId;
-        if (o.col === "ventes") { obj.auteur = "vendeur"; delete obj.coutU; obj.encaisse = false; obj.paiement = "Via le vendeur"; }
+        if (o.col === "ventes") { obj.auteur = "vendeur"; delete obj.coutU; delete obj.ajuste; obj.encaisse = false; obj.paiement = "Via le vendeur"; }
         if (o.col === "versements") obj.confirme = false;
         actions.push({ chemin: chemin(o.col) + "/" + o.id, data: obj });
       }

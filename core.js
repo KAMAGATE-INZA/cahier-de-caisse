@@ -91,24 +91,41 @@ const estDepot = v => !!v.vendeurId;
 
 /* ================= Règles de reversement des vendeurs ================= */
 const REGLES = {
-  "cout+part": "Il te rend ton coût + ta part du bénéfice",
-  "part": "Il te donne un pourcentage du bénéfice",
+  "cout+part": "Il te rend ton coût, puis vous partagez le bénéfice en %",
+  "commission": "Il garde un montant fixe par pièce, le reste est pour toi",
+  "part": "Il te donne un pourcentage du bénéfice (sans rembourser ton coût)",
   "fixe": "Il te donne un montant fixe par pièce"
 };
+const vendeursActifs = () => S.data.vendeurs.filter(v => !v.supprime);
 /* Base du partage avec le vendeur : ton vrai coût s'il a le droit de le voir, sinon le prix de base que tu as fixé */
 const basePartage = p => p.vendeurVoitCout ? (+p.cout || 0) : (+p.baseVendeur || +p.cout || 0);
 /* Ce que le vendeur te doit pour UNE pièce vendue au prix prixClient */
 function reverse(vd, p, prixClient) {
-  const cout = basePartage(p), prix = +prixClient || 0, pct = (+vd.pct || 0) / 100;
   if (!vd || vd.mode === "fixe") return +p.reverse || 0;
+  const cout = basePartage(p), prix = +prixClient || 0, pct = (+vd.pct || 0) / 100;
+  if (vd.mode === "commission") return Math.max(0, Math.round(prix - (+vd.montant || 0)));
   const benef = prix - cout;
   if (vd.mode === "part") return Math.max(0, Math.round(benef * pct));
   return Math.max(0, Math.round(cout + benef * pct));
 }
 function resumeRegle(vd) {
-  if (vd.mode === "fixe") return "Montant fixe par pièce";
-  if (vd.mode === "part") return `${vd.pct} % du bénéfice pour toi`;
-  return `Ton coût + ${vd.pct} % du bénéfice pour toi`;
+  const pct = +vd.pct || 0;
+  if (vd.mode === "fixe") return "Montant fixe par pièce pour toi";
+  if (vd.mode === "commission") return `Il garde ${F(vd.montant)} par pièce, le reste pour toi`;
+  if (vd.mode === "part") return `Bénéfice : ${pct} % pour toi, ${100 - pct} % pour lui (ton coût n'est pas remboursé)`;
+  return `Ton coût, puis bénéfice : ${pct} % pour toi, ${100 - pct} % pour lui`;
+}
+/* Ce que deviendrait le partage d'une vente : le bénéfice, ta part, sa part (les deux côtés) */
+function partageCalc(vd, p, prixClient, qte, duTotal) {
+  const q = +qte || 0, base = basePartage(p), benefice = ((+prixClient || 0) - base) * q;
+  const rembourse = vd && vd.mode === "part" ? 0 : base * q;
+  const du = duTotal === undefined ? reverse(vd, p, prixClient) * q : duTotal;
+  return { benefice, rembourse, du, maPart: du - rembourse, saPart: benefice - (du - rembourse), garde: (+prixClient || 0) * q - du };
+}
+function partageVente(v) {
+  const p = produitDe(v.produitId), vd = vendeurDe(v.vendeurId);
+  if (!p || !v.prixClient) return null;
+  return partageCalc(vd, p, v.prixClient, v.qte, totalVente(v));
 }
 
 /* ================= État & utilitaires ================= */
@@ -208,7 +225,7 @@ function stats(periode) {
     valeurStock += b.valeur; piecesStock += b.restant;
     if (b.p.mode === "depot") valeurChezVendeurs += b.valeur;
   }
-  const aRecevoirVendeurs = S.data.vendeurs.reduce((s, vd) => s + Math.max(0, compteVendeur(vd, "tout").solde), 0);
+  const aRecevoirVendeurs = vendeursActifs().reduce((s, vd) => s + Math.max(0, compteVendeur(vd, "tout").solde), 0);
   return { bp, byProd, ca, cout, dep, nbVentes, nbDep: deps.length, net: ca - cout - dep,
     aRecevoir: aRecevoirClients + aRecevoirChariow + aRecevoirVendeurs, aRecevoirChariow, aRecevoirVendeurs,
     valeurStock, piecesStock, valeurChezVendeurs };
@@ -217,11 +234,11 @@ function stats(periode) {
 /* Compte d'un vendeur : ce qu'il doit, ce qu'il a versé, sur une période et au total */
 function compteVendeur(vd, periode) {
   const bp = bornes(periode);
-  let du = 0, duP = 0, piecesP = 0, caClientP = 0, benefP = 0, verse = 0, verseP = 0, nbVersP = 0;
+  let du = 0, duP = 0, piecesP = 0, caClientP = 0, benefP = 0, gainP = 0, verse = 0, verseP = 0, nbVersP = 0;
   for (const v of S.data.ventes) {
     if (v.vendeurId !== vd.id) continue;
     const t = totalVente(v); du += t;
-    if (dansPeriode(v.date, bp)) { duP += t; piecesP += +v.qte || 0; caClientP += (+v.qte || 0) * (+v.prixClient || 0); benefP += beneficeVente(v); }
+    if (dansPeriode(v.date, bp)) { duP += t; piecesP += +v.qte || 0; caClientP += (+v.qte || 0) * (+v.prixClient || 0); benefP += beneficeVente(v); if (v.prixClient) gainP += (+v.qte || 0) * (+v.prixClient) - t; }
   }
   let aConfirmer = 0;
   for (const x of S.data.versements) {
@@ -237,6 +254,6 @@ function compteVendeur(vd, periode) {
     const r = Math.max(0, (+p.quantite || 0) - (vendus[p.id] || 0));
     piecesChezLui += r; valeurChezLui += r * (+p.cout || 0);
   }
-  return { du, duP, piecesP, caClientP, benefP, verse, verseP, nbVersP, solde: du - verse, piecesChezLui, valeurChezLui, aConfirmer };
+  return { du, duP, piecesP, caClientP, benefP, gainP, verse, verseP, nbVersP, solde: du - verse, piecesChezLui, valeurChezLui, aConfirmer };
 }
 

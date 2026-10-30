@@ -191,7 +191,7 @@ async function bilanImage() {
     x.fillStyle = "#5d6b66"; x.font = `600 28px ${POLICE}`; x.fillText("MEILLEURS PRODUITS", 72, y); y += 52;
     top.forEach((b, i) => ligne(`${i + 1}. ${texteLignes(x, nomComplet(b.p), 620, 1)[0]}`, F(b.benef)));
   }
-  const versP = S.data.vendeurs.reduce((s, vd) => s + compteVendeur(vd, S.periode).verseP, 0);
+  const versP = vendeursActifs().reduce((s, vd) => s + compteVendeur(vd, S.periode).verseP, 0);
   if (versP) { y += 10; ligne("Versé par tes vendeurs", F(versP)); }
   x.fillStyle = "#5d6b66"; x.font = `500 26px ${POLICE}`; x.fillText("Cahier de Caisse · " + new Date().toLocaleDateString("fr-FR"), 72, H - 56);
   apercuImages("Bilan en image", [await canvasVersBlob(c)], "bilan-" + todayISO(), "Garde-le comme souvenir de ton mois ou montre-le à un associé.");

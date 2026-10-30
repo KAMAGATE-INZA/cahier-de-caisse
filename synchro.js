@@ -212,7 +212,7 @@ function renderVendeurApp() {
   if (S.tab === "stock") renderVendeurStock(vd);
   if (S.tab === "vendeurs") renderVendeurCompte(vd);
 }
-const peutModifier = v => v.auteur === "vendeur" && Date.now() - (+v.cree || 0) < 86400000;
+const peutModifier = v => v.auteur === "vendeur" && !v.ajuste && Date.now() - (+v.cree || 0) < 86400000;
 function renderVendeurVentes(vd) {
   const bp = bornes(S.periode);
   const list = S.data.ventes.filter(v => dansPeriode(v.date, bp)).sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.cree || 0) - (a.cree || 0));
@@ -226,7 +226,7 @@ function renderVendeurVentes(vd) {
   for (const v of list.slice(0, S.limV)) {
     if (v.date !== last) { h += `<div class="dayhead">${esc(dayLabel(v.date))}</div>`; last = v.date; }
     h += `<div class="row${peutModifier(v) ? " compact" + (S.ouvert === v.id ? " open" : "") : ""}" data-row="${v.id}" tabindex="0">
-      <div><div class="t">${esc(nomProduit(v.produitId))} × ${+v.qte}</div><div class="m num">client ${F((+v.prixClient || 0) * v.qte)}${v.client ? " · " + esc(v.client) : ""}${v.auteur !== "vendeur" ? " · notée par le propriétaire" : ""}</div></div>
+      <div><div class="t">${esc(nomProduit(v.produitId))} × ${+v.qte}</div><div class="m num">client ${F((+v.prixClient || 0) * v.qte)} · tu gardes ${F((+v.prixClient || 0) * v.qte - totalVente(v))}${v.client ? " · " + esc(v.client) : ""}${v.auteur !== "vendeur" ? " · notée par le propriétaire" : ""}${v.ajuste ? ` <span class="tag gold">partage ajusté</span>` : ""}</div></div>
       <div class="amt num">${F(totalVente(v))}<div class="m">à reverser</div></div>
       ${peutModifier(v) ? `<div class="acts"><button class="mini" data-act="v-edit" data-id="${v.id}">Modifier</button><button class="mini danger" data-act="del" data-col="ventes" data-id="${v.id}">Supprimer</button><span class="note">Modifiable pendant 24 h</span></div>` : ""}
     </div>`;
