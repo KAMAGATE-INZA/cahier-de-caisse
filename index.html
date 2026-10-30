@@ -108,6 +108,9 @@ section{padding-top:16px;display:grid;gap:14px}
 .row .m{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 .row .amt{font-weight:700;text-align:right}
 .row .acts{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.row.compact{cursor:pointer}
+.row.compact:not(.open) .acts{display:none}
+.row.compact.open{border-color:var(--accent)}
 .mini{border:1px solid var(--line);background:transparent;border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;text-decoration:none;display:inline-block}
 .mini.danger{color:var(--red)}
 .mini.wa{color:var(--accent);border-color:var(--accent-soft);background:var(--accent-soft)}
@@ -222,7 +225,8 @@ const estChariow = v => v.paiement === "Chariow";
 /* ================= État & utilitaires ================= */
 let prefs = { tab: "bilan", periode: "mois" };
 try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS) || "{}")); } catch {}
-const S = { data: charger() || donneesInitiales(), tab: prefs.tab, periode: prefs.periode, q: "", qc: "" };
+const PAGE = 30;
+const S = { data: charger() || donneesInitiales(), tab: prefs.tab, periode: prefs.periode, q: "", qc: "", ouvert: null, limV: PAGE, limC: PAGE, limD: PAGE, tousProduits: false };
 function garderPrefs() { try { localStorage.setItem(PREFS, JSON.stringify({ tab: S.tab, periode: S.periode })); } catch {} }
 let stockageOK = true;
 try { localStorage.setItem(KEY + ":test", "1"); localStorage.removeItem(KEY + ":test"); } catch { stockageOK = false; }
@@ -272,6 +276,14 @@ function nomPeriode(periode) {
   return "depuis le début";
 }
 const dansPeriode = (iso, [a, b]) => iso >= a && iso <= b;
+function segPeriode() {
+  return `<div class="seg" role="group" aria-label="Période">${Object.entries(PERIODES).map(([k, l]) =>
+    `<button data-periode="${k}" aria-pressed="${k === S.periode}">${l}</button>`).join("")}</div>`;
+}
+/* Affichage par paquets : on montre 30 lignes, puis « Afficher plus » */
+function boutonPlus(quoi, reste, nom) {
+  return reste > 0 ? `<button class="btn sec" data-act="plus" data-quoi="${quoi}">Afficher ${Math.min(PAGE, reste)} de plus <span class="note">(encore ${reste} ${nom})</span></button>` : "";
+}
 
 /* ================= Calculs ================= */
 function stats(periode) {
@@ -319,8 +331,7 @@ function bannerSauvegarde() {
 
 function renderBilan(st) {
   const el = $("#v-bilan");
-  let h = `<div class="seg" role="group" aria-label="Période">${Object.entries(PERIODES).map(([k, l]) =>
-    `<button data-periode="${k}" aria-pressed="${k === S.periode}">${l}</button>`).join("")}</div>`;
+  let h = segPeriode();
   h += bannerSauvegarde();
 
   const bas = Object.values(stats("tout").byProd).filter(b => b.p.mode === "stock" && (+b.p.quantite > 0) && b.restant <= (+b.p.seuil || 0));
@@ -381,7 +392,8 @@ function renderBilan(st) {
   h += `<div class="label">Par produit, du plus rentable au moins rentable</div>`;
   if (!S.data.produits.length) h += `<div class="empty"><b>Aucun produit</b>Ajoute ton premier produit dans l'onglet Produits.</div>`;
   const liste = Object.values(st.byProd).sort((a, b) => b.benef - a.benef || b.vendus - a.vendus);
-  liste.forEach((b, i) => {
+  const MAXP = 5;
+  liste.slice(0, S.tousProduits ? liste.length : MAXP).forEach((b, i) => {
     const p = b.p, num = p.mode === "numerique", depot = p.mode === "depot";
     const q = +p.quantite || 0, pct = !num && q ? Math.min(100, b.vendusTotal / q * 100) : 0;
     const prixRef = depot ? (+p.reverse || 0) : (+p.prixVente || 0);
@@ -398,6 +410,7 @@ function renderBilan(st) {
       <div class="note num">Marge par pièce : ${(num || +p.cout || b.vendus) ? F(margeU) : "?"}${p.note ? " · " + esc(p.note) : ""}</div>
     </div>`;
   });
+  if (liste.length > MAXP) h += `<button class="btn sec" data-act="tous-produits">${S.tousProduits ? "Voir seulement les 5 premiers" : "Voir les " + liste.length + " produits"}</button>`;
   el.innerHTML = h;
 }
 
@@ -481,18 +494,23 @@ function texteRelance(v) {
 function renderVentes() {
   const el = $("#v-ventes");
   if (!S.data.ventes.length) { el.innerHTML = `<div class="empty"><b>Aucune vente enregistrée</b>Touche « + Vente » à chaque vente, même petite. C'est ce qui rend ton bilan juste.</div>`; return; }
-  const q = norm(S.q);
+  const q = norm(S.q), bp = bornes(S.periode);
   const list = [...S.data.ventes]
-    .filter(v => !q || norm([nomProduit(v.produitId), v.client, v.tel, v.paiement].join(" ")).includes(q))
+    .filter(v => q ? norm([nomProduit(v.produitId), v.client, v.tel, v.paiement].join(" ")).includes(q) : dansPeriode(v.date, bp))
     .sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.cree||0) - (a.cree||0));
-  let h = `<input class="search" id="q-ventes" type="search" placeholder="Chercher un produit, un client…" value="${esc(S.q)}" aria-label="Chercher dans les ventes">`;
-  if (!list.length) h += `<div class="empty">Aucune vente ne correspond à « ${esc(S.q)} ».</div>`;
+  const jours = {};
+  for (const v of list) { const j = jours[v.date] || (jours[v.date] = { n: 0, total: 0 }); j.n++; j.total += totalVente(v); }
+  const totalListe = list.reduce((t, v) => t + totalVente(v), 0);
+  let h = segPeriode() + `<input class="search" id="q-ventes" type="search" placeholder="Chercher un produit, un client…" value="${esc(S.q)}" aria-label="Chercher dans les ventes">`;
+  h += `<div class="note num">${q ? "Recherche dans toutes les périodes : " : ""}${list.length} vente${list.length > 1 ? "s" : ""} · ${F(totalListe)}${q ? "" : " · " + esc(nomPeriode(S.periode))}${list.length ? ". Touche une vente pour la modifier, l'encaisser ou écrire au client." : ""}</div>`;
+  if (!list.length) h += q ? `<div class="empty">Aucune vente ne correspond à « ${esc(S.q)} ».</div>`
+    : `<div class="empty"><b>Aucune vente sur cette période</b>Choisis « Tout » pour voir tout l'historique.</div>`;
   let last = "";
-  for (const v of list) {
-    if (v.date !== last) { h += `<div class="dayhead">${esc(dayLabel(v.date))}</div>`; last = v.date; }
-    h += `<div class="row">
+  for (const v of list.slice(0, S.limV)) {
+    if (v.date !== last) { const j = jours[v.date]; h += `<div class="dayhead num">${esc(dayLabel(v.date))} · ${j.n} vente${j.n > 1 ? "s" : ""} · ${F(j.total)}</div>`; last = v.date; }
+    h += `<div class="row compact${S.ouvert === v.id ? " open" : ""}" data-row="${v.id}" tabindex="0" aria-expanded="${S.ouvert === v.id}">
       <div><div class="t">${esc(nomProduit(v.produitId))} × ${+v.qte}</div>
-      <div class="m">${[v.client, v.paiement].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</div></div>
+      <div class="m">${[v.client, v.paiement].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}${v.encaisse ? "" : ` <span class="tag gold">${estChariow(v) ? "Versement attendu" : "À recevoir"}</span>`}</div></div>
       <div><div class="amt num">${F(totalVente(v))}</div><div class="m num" style="text-align:right">${beneficeVente(v) >= 0 ? "+" : "−"}${F(Math.abs(beneficeVente(v)))}</div></div>
       <div class="acts">
         <button class="paid ${v.encaisse ? "yes" : "no"}" data-act="toggle" data-id="${v.id}">${v.encaisse ? "Encaissé ✓" : estChariow(v) ? "Versement Chariow attendu — marquer reçu" : "À recevoir — marquer encaissé"}</button>
@@ -503,6 +521,7 @@ function renderVentes() {
         <button class="mini danger" data-act="del" data-col="ventes" data-id="${v.id}">Supprimer</button>
       </div></div>`;
   }
+  h += boutonPlus("limV", list.length - S.limV, "ventes");
   el.innerHTML = h;
 }
 
@@ -533,7 +552,8 @@ function renderClients() {
   let h = `<div class="chips"><div class="chip"><div class="label">Clients</div><div class="v num">${all.length}</div></div>
     <div class="chip"><div class="label">Revenus plusieurs fois</div><div class="v num">${fideles}</div></div></div>
     <input class="search" id="q-clients" type="search" placeholder="Chercher un client…" value="${esc(S.qc)}" aria-label="Chercher un client">`;
-  for (const c of list) {
+  if (q) h += `<div class="note">${list.length} client${list.length > 1 ? "s" : ""} trouvé${list.length > 1 ? "s" : ""}</div>`;
+  for (const c of list.slice(0, S.limC)) {
     const j = Math.floor((Date.now() - dateDe(c.dernier)) / 86400000);
     const r = S.data.reglages;
     const msg = c.du > 0
@@ -546,6 +566,7 @@ function renderClients() {
       ${numeroWa(c.tel) ? `<div class="acts"><a class="mini wa" href="${lienWa(c.tel, msg)}" target="_blank" rel="noopener">${c.du > 0 ? "Relancer le paiement" : "Écrire sur WhatsApp"}</a></div>` : ""}
     </div>`;
   }
+  h += boutonPlus("limC", list.length - S.limC, "clients");
   el.innerHTML = h;
 }
 
@@ -583,18 +604,21 @@ function renderStock(st) {
 function renderDepenses() {
   const el = $("#v-depenses");
   if (!S.data.depenses.length) { el.innerHTML = `<div class="empty"><b>Aucune dépense</b>Note tout ce que le business te coûte en plus des produits : pub, transport, livraison, emballage, création d'un e-book, crédit téléphone.</div>`; return; }
-  const list = [...S.data.depenses].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.cree||0) - (a.cree||0));
+  const bp = bornes(S.periode);
+  const list = S.data.depenses.filter(d => dansPeriode(d.date, bp)).sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.cree||0) - (a.cree||0));
+  if (!list.length) { el.innerHTML = segPeriode() + `<div class="empty"><b>Aucune dépense sur cette période</b>Choisis « Tout » pour voir tout l'historique.</div>`; return; }
   const tot = list.reduce((s,d) => s + (+d.montant||0), 0);
   const parCat = {};
   for (const d of list) parCat[d.categorie || "Autre"] = (parCat[d.categorie || "Autre"] || 0) + (+d.montant || 0);
   const cats = Object.entries(parCat).sort((a, b) => b[1] - a[1]);
-  let h = `<div class="card"><div class="head"><span class="label">Total des dépenses</span><b class="num">${F(tot)}</b></div>
-    ${cats.map(([c, m]) => `<div><div class="head note num"><span>${esc(c)}</span><span>${F(m)} · ${Math.round(m / tot * 100)} %</span></div><div class="bar"><i style="width:${m / tot * 100}%"></i></div></div>`).join("")}</div>`;
-  for (const d of list) h += `<div class="row">
+  let h = segPeriode() + `<div class="card"><div class="head"><span class="label">Dépenses · ${esc(nomPeriode(S.periode))}</span><b class="num">${F(tot)}</b></div>
+    ${cats.map(([c, m]) => `<div><div class="head note num"><span>${esc(c)}</span><span>${F(m)} · ${tot ? Math.round(m / tot * 100) : 0} %</span></div><div class="bar"><i style="width:${tot ? m / tot * 100 : 0}%"></i></div></div>`).join("")}</div>`;
+  for (const d of list.slice(0, S.limD)) h += `<div class="row compact${S.ouvert === d.id ? " open" : ""}" data-row="${d.id}" tabindex="0" aria-expanded="${S.ouvert === d.id}">
     <div><div class="t">${esc(d.libelle)}</div><div class="m">${esc(dayLabel(d.date))} · ${esc(d.categorie || "Autre")}</div></div>
     <div class="amt num">${F(d.montant)}</div>
     <div class="acts"><button class="mini" data-act="edit-dep" data-id="${d.id}">Modifier</button><button class="mini danger" data-act="del" data-col="depenses" data-id="${d.id}">Supprimer</button></div>
   </div>`;
+  h += boutonPlus("limD", list.length - S.limD, "dépenses");
   el.innerHTML = h;
 }
 
@@ -799,6 +823,7 @@ function reglagesSheet() {
     <h3>Sauvegarde</h3>
     <div class="box num">
       <div><b>${S.data.produits.length}</b> produits · <b>${S.data.ventes.length}</b> ventes · <b>${S.data.depenses.length}</b> dépenses</div>
+      <div class="note">Mémoire utilisée : ${memoire()}</div>
       <div class="note">Dernière sauvegarde : ${j === null ? "jamais" : j === 0 ? "aujourd'hui" : "il y a " + j + " jour" + (j > 1 ? "s" : "")}</div>
     </div>
     <p class="note">Tes données sont sur cet appareil. Sauvegarde au moins une fois par semaine et envoie le fichier sur ton Google Drive ou à toi-même sur WhatsApp. Si tu perds ton téléphone, ce fichier te permet de tout récupérer.</p>
@@ -816,6 +841,12 @@ function reglagesSheet() {
   });
 }
 
+/* Le navigateur réserve environ 5 millions de caractères à l'appli */
+function memoire() {
+  let n = 0; try { n = (localStorage.getItem(KEY) || "").length; } catch {}
+  const pct = n / 5e6 * 100;
+  return (n < 1e6 ? Math.max(1, Math.round(n / 1000)) + " Ko" : (n / 1e6).toFixed(1).replace(".", ",") + " Mo") + " · " + (pct < 1 ? "moins de 1" : Math.round(pct)) + " % de l'espace";
+}
 async function partagerFichier(nom, contenu, type, titre) {
   const fichier = new File([contenu], nom, { type });
   const mobile = matchMedia("(pointer: coarse)").matches;
@@ -873,19 +904,28 @@ $("#btn-reglages").addEventListener("click", reglagesSheet);
 document.addEventListener("input", e => {
   if (e.target.id === "q-ventes" || e.target.id === "q-clients") {
     const id = e.target.id, pos = e.target.selectionStart;
-    if (id === "q-ventes") { S.q = e.target.value; renderVentes(); } else { S.qc = e.target.value; renderClients(); }
+    if (id === "q-ventes") { S.q = e.target.value; S.limV = PAGE; renderVentes(); } else { S.qc = e.target.value; S.limC = PAGE; renderClients(); }
     const el = document.getElementById(id); el.focus(); try { el.setSelectionRange(pos, pos); } catch {}
   }
 });
+function basculerLigne(row) { S.ouvert = S.ouvert === row.dataset.row ? null : row.dataset.row; render(); }
+document.addEventListener("keydown", e => {
+  const row = e.target.closest && e.target.closest(".row.compact");
+  if (row && e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); basculerLigne(row); }
+});
 document.addEventListener("click", e => {
+  const row = e.target.closest(".row.compact");
+  if (row && !e.target.closest("a,button")) { basculerLigne(row); return; }
   const per = e.target.closest("[data-periode]");
-  if (per) { S.periode = per.dataset.periode; garderPrefs(); render(); return; }
+  if (per) { S.periode = per.dataset.periode; S.limV = S.limD = PAGE; garderPrefs(); render(); return; }
   const b = e.target.closest("[data-act]"); if (!b) return;
   const id = b.dataset.id, act = b.dataset.act;
   if (act === "exporter") return exporter();
   if (act === "csv") return exporterCSV();
   if (act === "importer") return $("#import-file").click();
   if (act === "reglages") return reglagesSheet();
+  if (act === "plus") { S[b.dataset.quoi] += PAGE; render(); return; }
+  if (act === "tous-produits") { S.tousProduits = !S.tousProduits; render(); return; }
   if (act === "copier") {
     const p = produitDe(id); if (!p) return;
     navigator.clipboard.writeText(p.lien).then(() => toast("Lien copié"), () => toast("Copie impossible : " + p.lien));
