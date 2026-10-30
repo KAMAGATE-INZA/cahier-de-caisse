@@ -1,0 +1,81 @@
+rules_version = '2';
+
+// Règles de sécurité du Cahier de Caisse.
+// À coller dans Firebase : Firestore Database > Règles > Publier.
+// Principe : le propriétaire voit et modifie tout ce qui est à lui.
+// Un vendeur ne lit que SES produits, SES ventes, SES versements et sa fiche.
+// Il ne lit jamais les coûts d'achat (produitsPrive, ventesPrive), les dépenses ni les arrivages.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function connecte() { return request.auth != null; }
+    function moi() { return request.auth.uid; }
+
+    // Fiche de compte : rôle (proprio ou vendeur) et boutique de rattachement
+    match /comptes/{uid} {
+      allow read: if connecte() && (moi() == uid || resource.data.boutique == moi());
+      allow create, update: if connecte() && (
+        (moi() == uid && request.resource.data.role == "proprio" && request.resource.data.boutique == uid)
+        || (moi() != uid && request.resource.data.role == "vendeur" && request.resource.data.boutique == moi()
+            && (!exists(/databases/$(database)/documents/comptes/$(uid))
+                || get(/databases/$(database)/documents/comptes/$(uid)).data.boutique == moi()))
+      );
+      allow delete: if connecte() && moi() != uid && resource.data.boutique == moi();
+    }
+
+    match /boutiques/{bid} {
+      function proprio() { return connecte() && moi() == bid; }
+      function membre() { return connecte() && exists(/databases/$(database)/documents/boutiques/$(bid)/membres/$(moi())); }
+      function monVendeurId() { return get(/databases/$(database)/documents/boutiques/$(bid)/membres/$(moi())).data.vendeurId; }
+      function produitAMoi(pid) { return get(/databases/$(database)/documents/boutiques/$(bid)/produits/$(pid)).data.vendeurUid == moi(); }
+
+      // Le propriétaire : tout
+      allow read, write: if proprio();
+      match /{col}/{id} {
+        allow read, write: if proprio();
+      }
+
+      // Le vendeur : sa fiche d'accès
+      match /membres/{uid} {
+        allow read: if connecte() && moi() == uid;
+      }
+      // Sa fiche vendeur (règle de partage, nom de la boutique)
+      match /vendeurs/{vid} {
+        allow read: if membre() && resource.data.uid == moi();
+      }
+      // Les produits qui lui sont confiés (sans le coût d'achat, rangé ailleurs)
+      match /produits/{pid} {
+        allow read: if membre() && resource.data.vendeurUid == moi();
+      }
+      match /photos/{pid} {
+        allow read: if membre() && produitAMoi(pid);
+      }
+      // Ses ventes : il les lit, en ajoute, et peut corriger les siennes pendant 24 h
+      match /ventes/{id} {
+        function venteValide() {
+          let d = request.resource.data;
+          return d.vendeurUid == moi() && d.auteur == "vendeur" && d.vendeurId == monVendeurId()
+            && d.qte is int && d.qte > 0 && d.prix is number && d.prix >= 0
+            && d.cree is int && produitAMoi(d.produitId) && !("coutU" in d);
+        }
+        allow read: if membre() && resource.data.vendeurUid == moi();
+        allow create: if membre() && venteValide()
+          && request.resource.data.cree > request.time.toMillis() - 86400000;
+        allow update: if membre() && resource.data.vendeurUid == moi() && resource.data.auteur == "vendeur"
+          && request.time.toMillis() - resource.data.cree < 86400000
+          && venteValide() && request.resource.data.cree == resource.data.cree;
+        allow delete: if membre() && resource.data.vendeurUid == moi() && resource.data.auteur == "vendeur"
+          && request.time.toMillis() - resource.data.cree < 86400000;
+      }
+      // Ses versements : il les lit et peut déclarer un envoi, que le propriétaire confirme
+      match /versements/{id} {
+        allow read: if membre() && resource.data.vendeurUid == moi();
+        allow create: if membre() && request.resource.data.vendeurUid == moi()
+          && request.resource.data.vendeurId == monVendeurId()
+          && request.resource.data.confirme == false
+          && request.resource.data.montant is number && request.resource.data.montant > 0;
+      }
+    }
+  }
+}
