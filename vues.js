@@ -1,8 +1,20 @@
 "use strict";
 /* ================= Affichage ================= */
 const ONGLETS = ["bilan","ventes","stock","vendeurs","depenses"];
+const NAV_PROPRIO = document.querySelector("nav.tabs").innerHTML;
+/* Remet le menu, le titre et les boutons du propriétaire (après un aperçu ou un passage en espace vendeur) */
+function interfaceProprio() {
+  const nav = document.querySelector("nav.tabs");
+  if (nav.dataset.mode === "vendeur") { nav.dataset.mode = ""; nav.innerHTML = NAV_PROPRIO; }
+  $("#btn-reglages").hidden = false;
+  $("header h1").textContent = "Cahier de Caisse";
+  $("#fab").hidden = false;
+  const b = document.getElementById("bandeau-apercu"); if (b) b.remove();
+}
 function render() {
   if (S.role === "vendeur") return renderVendeurApp();
+  if (S.apercu) return renderApercu();
+  interfaceProprio();
   if (!ONGLETS.includes(S.tab)) S.tab = "bilan";
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
   for (const t of ONGLETS) $("#v-" + t).hidden = t !== S.tab;
@@ -403,6 +415,7 @@ function renderVendeurs() {
         <button class="mini" data-act="releve" data-id="${vd.id}">Relevé</button>
         ${numeroWa(vd.tel) ? `<a class="mini" href="${lienWa(vd.tel, msg)}" target="_blank" rel="noopener">Faire le point sur WhatsApp</a>` : ""}
         <button class="mini" data-act="edit-vendeur" data-id="${vd.id}">Modifier</button>
+        <button class="mini" data-act="apercu" data-id="${vd.id}">Voir son espace</button>
       </div>${htmlAccesVendeur(vd)}</div>`;
   }
   h += `<button class="btn sec" data-act="nouveau-vendeur">Ajouter un vendeur</button>`;

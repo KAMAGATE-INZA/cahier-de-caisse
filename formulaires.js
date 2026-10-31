@@ -13,7 +13,7 @@ function openSheet(html, onSubmit) {
   return form || sh;
 }
 function closeSheet() { $("#sheet").hidden = true; $("#scrim").hidden = true; $("#sheet").innerHTML = ""; }
-$("#scrim").addEventListener("click", closeSheet);
+$("#scrim").addEventListener("click", () => { if (!S.feuilleBloquante) closeSheet(); });
 function toast(t) { const el = $("#toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 2400); }
 const buttons = `<div class="err"></div><div class="btns"><button type="button" class="btn sec" data-close>Annuler</button><button type="submit" class="btn pri">Enregistrer</button></div>`;
 const opt = (val, lab, sel) => `<option value="${esc(val)}"${sel ? " selected" : ""}>${esc(lab)}</option>`;

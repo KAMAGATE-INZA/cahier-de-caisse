@@ -74,6 +74,8 @@ async function ouvrirSession(u) {
     if (!compte && !horsLigne) await fb.setDoc(fb.doc(fs, "comptes", u.uid), { role: "proprio", boutique: u.uid });
   }
   cfg.session = { uid: u.uid, role: C.role, boutique: C.boutique, vendeurId: C.vendeurId, email: u.email };
+  /* Le rôle vient du serveur, pas du lien ouvert : on nettoie toute trace d'un lien vendeur sur un compte propriétaire */
+  if (C.role === "proprio") { delete cfg.vendeur; delete cfg.identifiant; } else cfg.vendeur = true;
   ecrireCfg(cfg);
   if (C.role === "proprio") { if (!horsLigne) await preparerBoutique(cfg); abonnerProprio(); }
   else abonnerVendeur();
@@ -96,6 +98,11 @@ async function preparerBoutique(cfg) {
     await fb.setDoc(ref, { reglages: propre(S.data.reglages), cree: Date.now() });
   } else if (cfg.lie !== C.user.uid && local > 0) {
     const distantes = await fb.getDocs(fb.collection(fs, chemin("ventes")));
+    const distProd = await fb.getDocs(fb.collection(fs, chemin("produits")));
+    /* Si tout ce qui est sur l'appareil est déjà en ligne (même compte, simple reconnexion), rien à demander */
+    const idsV = new Set(distantes.docs.map(d => d.id)), idsP = new Set(distProd.docs.map(d => d.id));
+    const dejaEnLigne = S.data.ventes.every(v => idsV.has(v.id)) && S.data.produits.every(p => idsP.has(p.id));
+    if (dejaEnLigne) { cfg.lie = C.user.uid; ecrireCfg(cfg); return; }
     const choix = await window.choisirDonnees({ ventesLocales: S.data.ventes.length, ventesEnLigne: distantes.size });
     if (choix === "local") {
       try { localStorage.setItem("cahier-de-caisse:avant-synchro", JSON.stringify(S.data)); } catch {}
@@ -224,6 +231,13 @@ function abonnerProprio() {
     },
     async remplacerTout(data) { await viderEnLigne(); await televerserTout(data, true); }
   };
+  viderFileAttente();
+}
+/* Écritures faites pendant les premières secondes, avant la fin de la connexion : on les envoie maintenant */
+function viderFileAttente() {
+  if (!db.enAttente || !db.enAttente.length) return;
+  const ops = db.enAttente; db.enAttente = [];
+  db.cloud.ecrire(ops);
 }
 /* Une vente ajoutée par le vendeur n'a pas de coût d'achat : on le fige avec le coût actuel du produit */
 function figerCoutsVentesVendeur(maps) {
@@ -278,6 +292,7 @@ function abonnerVendeur() {
       envoyer(actions);
     }
   };
+  viderFileAttente();
 }
 const _photosDemandees = new Set();
 async function chargerPhotosVendeur() {

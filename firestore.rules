@@ -61,7 +61,8 @@ service cloud.firestore {
         }
         allow read: if membre() && resource.data.vendeurUid == moi();
         allow create: if membre() && venteValide()
-          && request.resource.data.cree > request.time.toMillis() - 86400000;
+          && request.resource.data.cree > request.time.toMillis() - 86400000
+          && request.resource.data.cree < request.time.toMillis() + 600000;
         allow update: if membre() && resource.data.vendeurUid == moi() && resource.data.auteur == "vendeur" && !("ajuste" in resource.data)
           && request.time.toMillis() - resource.data.cree < 86400000
           && venteValide() && request.resource.data.cree == resource.data.cree;

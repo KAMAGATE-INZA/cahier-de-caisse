@@ -2,6 +2,7 @@
 /* ================= Événements ================= */
 document.querySelector("nav.tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.tab = b.dataset.tab; S.ouvert = null; garderPrefs(); render(); window.scrollTo(0, 0); });
 $("#fab").addEventListener("click", () => {
+  if (S.apercu) return;
   if (S.role === "vendeur") return S.tab === "vendeurs" ? versementVendeurForm() : venteVendeurForm();
   ({ depenses: depenseForm, stock: () => produitForm(), vendeurs: () => versementForm() }[S.tab] || (() => venteForm()))();
 });
@@ -35,6 +36,7 @@ document.addEventListener("click", e => {
   if (per) { S.periode = per.dataset.periode; S.limV = S.limD = PAGE; garderPrefs(); render(); return; }
   const b = e.target.closest("[data-act]"); if (!b) return;
   const id = b.dataset.id, act = b.dataset.act;
+  if (S.apercu && act !== "quitter-apercu") { toast("Aperçu : lecture seule. Quitte l'aperçu pour modifier."); return; }
   if (act === "exporter") return exporter();
   if (act === "csv") return exporterCSV();
   if (act === "importer") return $("#import-file").click();

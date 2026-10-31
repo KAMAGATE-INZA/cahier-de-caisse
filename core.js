@@ -63,6 +63,7 @@ function enregistrer() {
 /* Toutes les écritures passent par ici : l'appareil d'abord, puis le serveur si la synchro est active */
 const db = {
   cloud: null,
+  enAttente: [],
   appliquer(ops, sansRendu) {
     for (const o of ops) {
       const liste = S.data[o.col];
@@ -72,6 +73,7 @@ const db = {
     }
     enregistrer();
     if (this.cloud) this.cloud.ecrire(ops);
+    else if (localStorage.getItem("cahier-de-caisse:cloud")) this.enAttente.push(...ops); /* synchro pas encore prête */
     if (!sansRendu) render();
   },
   ajouter(col, obj) { const o = { id: nouvelId(), ...obj }; this.appliquer([{ type: "ajout", col, id: o.id, data: o }]); return o; },

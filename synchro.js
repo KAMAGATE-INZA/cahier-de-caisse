@@ -49,13 +49,14 @@ window.surDeconnexion = () => { majEtatSynchro(); };
 
 /* Premier branchement sur un appareil qui a déjà des données */
 window.choisirDonnees = ({ ventesLocales, ventesEnLigne }) => new Promise(res => {
+  S.feuilleBloquante = true;
   openSheet(`<div class="inner"><h2>Quelles données garder ?</h2>
     <p>Ton compte en ligne contient déjà ${plur(ventesEnLigne, "vente")}. Cet appareil en contient ${plur(ventesLocales, "vente")}.</p>
     <p class="note">Une copie des données de cet appareil est gardée de côté dans tous les cas.</p>
     <button class="btn pri" id="ch-en-ligne">Garder celles en ligne</button>
     <button class="btn sec" id="ch-local">Remplacer en ligne par celles de cet appareil</button></div>`);
-  $("#ch-en-ligne").addEventListener("click", () => { closeSheet(); res("enligne"); });
-  $("#ch-local").addEventListener("click", () => { closeSheet(); res("local"); });
+  $("#ch-en-ligne").addEventListener("click", () => { S.feuilleBloquante = false; closeSheet(); res("enligne"); });
+  $("#ch-local").addEventListener("click", () => { S.feuilleBloquante = false; closeSheet(); res("local"); });
 });
 
 /* ================= Écran de connexion ================= */
@@ -334,21 +335,74 @@ ACTIONS["v-mdp"] = () => {
   });
 };
 
+/* ================= Aperçu de l'espace d'un vendeur (pour le propriétaire) ================= */
+function ouvrirApercu(vendeurId) { S.apercu = vendeurId; S.tab = "ventes"; S.ouvert = null; render(); window.scrollTo(0, 0); }
+function fermerApercu() { S.apercu = null; S.tab = "vendeurs"; render(); window.scrollTo(0, 0); }
+/* Construit exactement ce que le serveur enverrait au vendeur : ses produits (sans ton coût réel), ses ventes, ses versements */
+function donneesVuesParVendeur(vd) {
+  return { ...donneesInitiales(),
+    reglages: { ...S.data.reglages },
+    vendeurs: [vd],
+    produits: S.data.produits.filter(p => p.mode === "depot" && p.vendeurId === vd.id)
+      .map(p => { const b = basePartage(p), c = { ...p, cout: b, baseVendeur: b, vendeurVoitCout: !!p.vendeurVoitCout, coutVisible: !!p.vendeurVoitCout }; delete c.note; return c; }),
+    ventes: S.data.ventes.filter(v => v.vendeurId === vd.id).map(v => { const c = { ...v }; delete c.coutU; return c; }),
+    versements: S.data.versements.filter(x => x.vendeurId === vd.id) };
+}
+function renderApercu() {
+  const vd = vendeurDe(S.apercu);
+  if (!vd) { S.apercu = null; return render(); }
+  const vrai = S.data, roleAvant = S.role;
+  S.data = donneesVuesParVendeur(vd); S.role = "vendeur";
+  try { renderVendeurApp(); } finally { S.data = vrai; S.role = roleAvant; }
+  let b = document.getElementById("bandeau-apercu");
+  if (!b) { b = document.createElement("div"); b.id = "bandeau-apercu"; document.querySelector(".wrap").insertBefore(b, document.querySelector("nav.tabs")); }
+  b.className = "banner"; b.style.marginBottom = "8px";
+  b.innerHTML = `<span><b>Aperçu :</b> voici exactement ce que ${esc(vd.nom)} voit sur son téléphone. Rien ne peut être modifié ici.</span><button class="mini" data-act="quitter-apercu">Quitter l'aperçu</button>`;
+  $("#fab").hidden = true;
+}
+ACTIONS["apercu"] = id => ouvrirApercu(id);
+ACTIONS["quitter-apercu"] = () => fermerApercu();
+
 /* ================= Démarrage de la synchro ================= */
+/* Lien d'accès vendeur ouvert sur l'appareil du propriétaire : on ne touche à rien, on propose l'aperçu */
+function lienVendeurSurAppareilProprio(o, avecSynchro) {
+  openSheet(`<div class="inner"><h2>Lien d'accès vendeur</h2>
+    <p>Ce lien sert à ${o.i ? "<b>" + esc(o.i) + "</b>" : "ton vendeur"} pour se connecter sur <b>son</b> téléphone.</p>
+    <p class="note">${avecSynchro ? "Cet appareil est connecté à ton compte de propriétaire : je n'ai rien changé." : "Cet appareil contient tes données de propriétaire : je n'ai rien changé."} Pour voir exactement ce que voit ton vendeur, utilise l'aperçu.</p>
+    ${avecSynchro ? `<button class="btn pri" id="lv-apercu">Voir son espace (aperçu)</button>` : `<button class="btn sec" id="lv-vendeur">Utiliser cet appareil comme vendeur</button>`}
+    <button class="btn sec" data-close>Fermer</button></div>`);
+  const ap = $("#lv-apercu");
+  if (ap) ap.addEventListener("click", () => {
+    const vd = vendeursActifs().find(x => x.identifiant && x.identifiant === o.i) || vendeursActifs().find(x => Cloud.slug && Cloud.slug(x.nom) === o.i);
+    closeSheet();
+    if (vd) ouvrirApercu(vd.id); else toast("Vendeur introuvable : ouvre l'aperçu depuis l'onglet Vendeurs.");
+  });
+  const lv = $("#lv-vendeur");
+  if (lv) lv.addEventListener("click", () => {
+    localStorage.setItem(CLOUD_KEY, JSON.stringify({ firebase: o.f, identifiant: o.i || "", vendeur: true }));
+    location.reload();
+  });
+}
+
 (function () {
   /* Lien d'accès envoyé à un vendeur : #acces=… */
   const m = location.hash.match(/^#acces=([\w-]+)/);
   if (m) {
-    try {
-      const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
-      const o = JSON.parse(decodeURIComponent(escape(atob(b64))));
-      if (o && o.f && o.f.apiKey) localStorage.setItem(CLOUD_KEY, JSON.stringify({ firebase: o.f, identifiant: o.i || "", vendeur: true }));
-    } catch {}
+    let o = null;
+    try { o = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, "+").replace(/_/g, "/"))))); } catch {}
     history.replaceState(null, "", location.pathname + location.search);
+    if (o && o.f && o.f.apiKey) {
+      const avant = cfgCloud();
+      const proprioConnecte = avant && !(avant.session && avant.session.role === "vendeur") && !avant.vendeur;
+      const donneesProprio = !avant && (S.data.produits.length + S.data.ventes.length + S.data.depenses.length) > 0;
+      if (proprioConnecte || donneesProprio) setTimeout(() => lienVendeurSurAppareilProprio(o, !!proprioConnecte), 300);
+      else localStorage.setItem(CLOUD_KEY, JSON.stringify({ firebase: o.f, identifiant: o.i || "", vendeur: true }));
+    }
   }
   const cfg = cfgCloud();
   if (!cfg) return;
-  if (cfg.session && cfg.session.role === "vendeur" || cfg.vendeur) { S.role = "vendeur"; S.data = donneesInitiales(); }
+  /* On ne passe en espace vendeur que si le serveur a confirmé ce rôle */
+  if (cfg.session && cfg.session.role === "vendeur") { S.role = "vendeur"; S.data = donneesInitiales(); }
   majEtatSynchro();
   /* Pas de session connue : on affiche directement l'écran de connexion */
   if (!cfg.session || cfg.creation) setTimeout(afficherConnexion, 0);
