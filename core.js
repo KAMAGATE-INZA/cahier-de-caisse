@@ -3,13 +3,13 @@
 const KEY = "cahier-de-caisse:v1";
 const PREFS = "cahier-de-caisse:prefs";
 const FORMAT = 3;
-const VERSION_APPLI = "12"; /* affichée dans Réglages : permet de vérifier que la mise à jour est arrivée */
+const VERSION_APPLI = "14"; /* affichée dans Réglages : permet de vérifier que la mise à jour est arrivée */
 const nouvelId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 function donneesInitiales() {
   return { format: FORMAT, cree: Date.now(), modifie: Date.now(), derniereSauvegarde: null,
     reglages: { boutique: "", numero: "", objectifMois: 0 },
-    produits: [], vendeurs: [], ventes: [], depenses: [], versements: [], arrivages: [] };
+    produits: [], vendeurs: [], ventes: [], depenses: [], versements: [], arrivages: [], clients: [] };
 }
 function valide(d) { return d && Array.isArray(d.produits) && Array.isArray(d.ventes) && Array.isArray(d.depenses); }
 
@@ -19,6 +19,7 @@ function normaliser(d) {
   d.vendeurs = Array.isArray(d.vendeurs) ? d.vendeurs : [];
   d.versements = Array.isArray(d.versements) ? d.versements : [];
   d.arrivages = Array.isArray(d.arrivages) ? d.arrivages : [];
+  d.clients = Array.isArray(d.clients) ? d.clients : [];
   for (const x of d.versements) if (x.confirme === undefined) x.confirme = true;
   for (const p of d.produits) {
     if (!p.mode) p.mode = "stock";
@@ -76,6 +77,7 @@ const db = {
     if (this.cloud) this.cloud.ecrire(ops);
     else if (localStorage.getItem("cahier-de-caisse:cloud")) this.enAttente.push(...ops); /* synchro pas encore prête */
     if (!sansRendu) render();
+    if (typeof planifierVitrine === "function") planifierVitrine(); /* la boutique en ligne suit le stock */
   },
   ajouter(col, obj) { const o = { id: nouvelId(), ...obj }; this.appliquer([{ type: "ajout", col, id: o.id, data: o }]); return o; },
   modifier(col, id, patch) { this.appliquer([{ type: "modif", col, id, data: patch }]); },

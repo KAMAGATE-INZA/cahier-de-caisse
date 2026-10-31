@@ -23,9 +23,9 @@ function optionsProduits(sel) {
   return Object.keys(parCat).sort().map(c => `<optgroup label="${esc(c)}">${parCat[c].sort((a, b) => nomComplet(a).localeCompare(nomComplet(b))).map(p => opt(p.id, nomComplet(p), p.id === sel)).join("")}</optgroup>`).join("");
 }
 
-function venteForm(v) {
+function venteForm(v, modele) {
   if (!S.data.produits.length) { S.tab = "stock"; render(); produitForm(); toast("Ajoute d'abord un produit"); return; }
-  const edit = !!v; v = v || {};
+  const edit = !!v; v = v || Object.assign({}, modele || {});
   const pays = ["Wave","Orange Money","MTN MoMo","Moov Money","Espèces","Chariow"];
   const connus = clients();
   const form = openSheet(`<form><h2>${edit ? "Modifier la vente" : "Nouvelle vente"}</h2>
@@ -151,6 +151,7 @@ function venteForm(v) {
 
 function produitForm(p, modele) {
   const edit = !!(p && p.id);
+  const galerie = edit ? photosDe(p.id) : [];
   p = p || Object.assign({ mode: "stock", seuil: 2 }, modele || {});
   const cats = [...new Set(S.data.produits.map(x => x.categorie).filter(Boolean))].sort();
   const noms = [...new Set(S.data.produits.map(x => x.nom))].sort();
@@ -193,11 +194,16 @@ function produitForm(p, modele) {
     <div class="hint" data-pour="num" id="p-num-hint"></div>
     <div class="field" data-pour="num"><label for="p-lien">Lien de ta page de vente</label><input id="p-lien" name="lien" type="url" inputmode="url" placeholder="https://ta-boutique.mychariow.shop/…" value="${esc(p.lien||"")}"></div>
     <div class="field" data-pour="num"><label for="p-acc">Phrase d'accroche (facultatif)</label><input id="p-acc" name="accroche" type="text" placeholder="Ex. Protège ton Mobile Money contre les arnaques" value="${esc(p.accroche||"")}"></div>
-    <div class="field"><label for="p-note">Note (facultatif)</label><input id="p-note" name="note" type="text" value="${esc(p.note||"")}"></div>
-    <div class="field"><label for="p-photo">Photo (facultatif)</label>
-      <div class="photo-pick">${PHOTOS[p.id] ? `<img src="${PHOTOS[p.id]}" alt="" id="p-photo-apercu">` : `<img alt="" id="p-photo-apercu" hidden>`}
-      <input id="p-photo" type="file" accept="image/*"></div>
-      <div class="hint">Elle sert pour ton catalogue à partager.</div></div>
+    <div class="field"><label for="p-desc">Description pour tes clients (facultatif)</label>
+      <textarea id="p-desc" name="description" rows="3" maxlength="400" placeholder="Ex. Cuir véritable, semelle confortable, idéale pour le bureau. Tailles du 39 au 44.">${esc(p.description || "")}</textarea>
+      <div class="hint">Elle apparaît sur tes fiches catalogue et dans tes messages de vente.</div></div>
+    <div class="field"><label for="p-avant">Ancien prix, pour une promo (facultatif)</label><input id="p-avant" name="prixAvant" type="number" inputmode="numeric" min="0" step="1" value="${+p.prixAvant || ""}" placeholder="Ex. 15000"></div>
+    <div class="field"><label>Photos (jusqu'à ${MAX_PHOTOS})</label>
+      <div class="galerie-edit" id="p-galerie"></div>
+      <input id="p-photos" type="file" accept="image/*" multiple hidden>
+      <div class="hint">La première est la photo principale. Touche une autre photo pour la mettre en premier.</div></div>
+    <label class="check"><input id="p-enligne" name="enLigne" type="checkbox" ${p.horsBoutique ? "" : "checked"}> Montrer dans ma boutique en ligne</label>
+    <div class="field"><label for="p-note">Note pour toi (facultatif, jamais montrée)</label><input id="p-note" name="note" type="text" value="${esc(p.note||"")}"></div>
     ${edit ? `<label class="check"><input id="p-retro" name="retro" type="checkbox" checked> Appliquer les nouveaux coûts aux ventes déjà notées</label>
     <div class="hint">Laisse coché pour corriger une erreur. Décoche si le changement ne vaut que pour les prochaines ventes, par exemple quand Chariow baisse ta commission à 10 %.</div>` : ""}
     ${buttons}</form>`, fd => {
@@ -205,7 +211,9 @@ function produitForm(p, modele) {
         quantite: +fd.get("quantite") || 0, cout: +fd.get("cout") || 0, prixVente: +fd.get("prixVente") || 0, reverse: +fd.get("reverse") || 0,
         note: (fd.get("note")||"").trim(), seuil: +fd.get("seuil") || 0, frais: +fd.get("frais") || 0, lien: (fd.get("lien")||"").trim(),
         plateforme: fd.get("plateforme") || "moi", commission: Math.min(100, Math.max(0, +fd.get("commission") || 0)), accroche: (fd.get("accroche")||"").trim(),
-        vendeurVoitCout: fd.get("vendeurVoitCout") === "on", baseVendeur: +fd.get("baseVendeur") || 0 };
+        vendeurVoitCout: fd.get("vendeurVoitCout") === "on", baseVendeur: +fd.get("baseVendeur") || 0,
+        description: (fd.get("description") || "").trim(), prixAvant: +fd.get("prixAvant") || 0, horsBoutique: fd.get("enLigne") === "on" ? undefined : true };
+      if (data.prixAvant && data.prixAvant <= data.prixVente) throw new Error("L'ancien prix doit être plus élevé que le prix de vente, sinon laisse-le vide.");
       if (!data.nom) throw new Error("Donne un nom au produit.");
       const doublon = S.data.produits.find(x => x.id !== p.id && norm(x.nom) === norm(data.nom) && norm(x.variante) === norm(data.variante));
       if (doublon) throw new Error("Ce produit existe déjà. Donne un nom de variante différent (modèle, couleur, taille…).");
@@ -236,10 +244,9 @@ function produitForm(p, modele) {
           if (Object.keys(patch).length) ops.push({ type: "modif", col: "ventes", id: v.id, data: patch });
         }
         ops.push({ type: "modif", col: "produits", id, data });
-      } else ops.push({ type: "ajout", col: "produits", id, data: { id, ...data } });
+      } else ops.push({ type: "ajout", col: "produits", id, data: { id, ...data, cree: Date.now() } });
       db.appliquer(ops);
-      const fichier = $("#p-photo").files[0];
-      if (fichier) enregistrerPhoto(id, fichier).then(() => render()).catch(() => toast("La photo n'a pas pu être enregistrée."));
+      if (galerie.join("|") !== photosDe(id).join("|")) definirPhotos(id, galerie).then(() => render());
       toast(message);
     });
   const vdChoisi = () => form.vendeurId.value === "__nouveau" ? null : vendeurDe(form.vendeurId.value);
@@ -279,7 +286,21 @@ function produitForm(p, modele) {
   [form.prixVente, form.commission, form.frais].forEach(i => i.addEventListener("input", majNum));
   [form.prixVente, form.cout, form.reverse, form.baseVendeur].forEach(i => i.addEventListener("input", majCalc));
   form.vendeurVoitCout.addEventListener("change", sync);
-  $("#p-photo").addEventListener("change", () => { const f = $("#p-photo").files[0]; if (f) { const im = $("#p-photo-apercu"); im.src = URL.createObjectURL(f); im.hidden = false; } });
+  /* Galerie : ajouter, retirer, choisir la photo principale */
+  const dessinerGalerie = () => {
+    $("#p-galerie").innerHTML = galerie.map((ph, i) => `<div class="g-photo${i === 0 ? " principale" : ""}"><img src="${urlPhoto(ph)}" alt="Photo ${i + 1}" data-premiere="${i}">${i === 0 ? `<span class="g-tag">Principale</span>` : ""}<button type="button" class="g-x" data-retirer-photo="${i}" aria-label="Retirer la photo">✕</button></div>`).join("")
+      + (galerie.length < MAX_PHOTOS ? `<button type="button" class="g-plus" id="p-ajout-photo">+ Photo</button>` : "");
+  };
+  $("#p-galerie").addEventListener("click", e => {
+    const r = e.target.closest("[data-retirer-photo]"); if (r) { galerie.splice(+r.dataset.retirerPhoto, 1); dessinerGalerie(); return; }
+    const pr = e.target.closest("[data-premiere]"); if (pr && +pr.dataset.premiere > 0) { const [x] = galerie.splice(+pr.dataset.premiere, 1); galerie.unshift(x); dessinerGalerie(); return; }
+    if (e.target.closest("#p-ajout-photo")) $("#p-photos").click();
+  });
+  $("#p-photos").addEventListener("change", async () => {
+    const fichiers = [...$("#p-photos").files].slice(0, MAX_PHOTOS - galerie.length); $("#p-photos").value = "";
+    for (const f of fichiers) { try { galerie.push(await compresserImage(f)); } catch { toast("Une photo n'a pas pu être lue."); } dessinerGalerie(); }
+  });
+  dessinerGalerie();
   form.vendeurId.addEventListener("change", sync);
   if (!edit && !modele) { form.plateforme.value = "chariow"; form.commission.value = 15; }
   if (!vendeursActifs().length) form.vendeurId.value = "__nouveau";
@@ -306,7 +327,7 @@ function restockForm(p) {
       const n = +fd.get("qte"), c = +fd.get("cout");
       if (!(n > 0) || !(c >= 0)) throw new Error("Indique un nombre de pièces et un coût.");
       const moyen = Math.round(restant + n > 0 ? (restant * (+p.cout || 0) + n * c) / (restant + n) : c);
-      db.modifier("produits", p.id, { quantite: (+p.quantite || 0) + n, cout: moyen });
+      db.modifier("produits", p.id, { quantite: (+p.quantite || 0) + n, cout: moyen, reappro: Date.now() });
       toast(plur(n, "pièce ajoutée", "pièces ajoutées") + " · coût moyen " + F(moyen));
     });
   const maj = () => {
@@ -476,7 +497,7 @@ function reglagesSheet() {
   $("#f-reglages").addEventListener("submit", e => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    S.data.reglages = { boutique: fd.get("boutique").trim(), numero: fd.get("numero").trim(), objectifMois: +fd.get("objectifMois") || 0 };
+    S.data.reglages = Object.assign({}, S.data.reglages, { boutique: fd.get("boutique").trim(), numero: fd.get("numero").trim(), objectifMois: +fd.get("objectifMois") || 0 });
     if (db.cloud && db.cloud.reglages) db.cloud.reglages(S.data.reglages);
     enregistrer(); render(); closeSheet(); toast("Réglages enregistrés");
   });
@@ -502,7 +523,7 @@ async function partagerFichier(nom, contenu, type, titre) {
   return true;
 }
 async function exporter() {
-  const contenu = JSON.stringify({ app: "cahier-de-caisse", exporte: new Date().toISOString(), ...S.data, derniereSauvegarde: Date.now(), photos: PHOTOS }, null, 2);
+  const contenu = JSON.stringify({ app: "cahier-de-caisse", exporte: new Date().toISOString(), ...S.data, derniereSauvegarde: Date.now(), photos: PHOTOS, galeries: AUTRES }, null, 2);
   if (await partagerFichier("cahier-de-caisse-" + todayISO() + ".json", contenu, "application/json", "Sauvegarde Cahier de Caisse")) {
     S.data.derniereSauvegarde = Date.now(); enregistrer(); render(); closeSheet(); toast("Sauvegarde créée");
   }
@@ -540,7 +561,10 @@ $("#import-file").addEventListener("change", async e => {
       reglages: d.reglages, produits: d.produits, vendeurs: d.vendeurs, ventes: d.ventes, depenses: d.depenses, versements: d.versements, arrivages: d.arrivages });
     if (db.cloud && db.cloud.remplacerTout) db.cloud.remplacerTout(nouv);
     S.data = nouv;
-    if (d.photos && typeof d.photos === "object") for (const [id, url] of Object.entries(d.photos)) if (typeof url === "string" && url.startsWith("data:image/")) definirPhoto(id, url);
+    if (d.photos && typeof d.photos === "object") {
+      const gal = d.galeries && typeof d.galeries === "object" ? d.galeries : {};
+      for (const [id, url] of Object.entries(d.photos)) definirPhotos(id, [url, ...(Array.isArray(gal[id]) ? gal[id] : [])]);
+    }
     enregistrer(); closeSheet(); render(); toast("Données restaurées");
   });
 });

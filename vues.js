@@ -19,8 +19,12 @@ function render() {
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
   for (const t of ONGLETS) $("#v-" + t).hidden = t !== S.tab;
   $("#fab").textContent = { depenses: "+ Dépense", stock: "+ Produit", vendeurs: "+ Versement" }[S.tab] || "+ Vente";
-  const st = stats(S.periode);
-  renderBilan(st); renderVentes(); renderStock(stats("tout")); renderVendeurs(); renderDepenses();
+  /* Fluidité : on ne dessine que l'onglet affiché ; les autres le seront quand on les ouvre */
+  if (S.tab === "bilan") renderBilan(stats(S.periode));
+  else if (S.tab === "ventes") renderVentes();
+  else if (S.tab === "stock") renderStock(stats("tout"));
+  else if (S.tab === "vendeurs") renderVendeurs();
+  else if (S.tab === "depenses") renderDepenses();
 }
 
 function bannerSauvegarde() {
@@ -110,6 +114,7 @@ function renderBilan(st) {
   if (activite) h += `<div class="outils"><button class="mini" data-act="bilan-image">Partager ce bilan en image</button></div>`;
   if (st.nbVentes) h += graphique(st.bp);
 
+  h += htmlCarteDodo();
   h += `<div class="label">Par produit, du plus rentable au moins rentable</div>`;
   if (!S.data.produits.length) h += `<div class="empty"><b>Aucun produit</b>Ajoute ton premier produit dans l'onglet Stock.</div>`;
   const liste = Object.values(st.byProd).sort((a, b) => b.benef - a.benef || b.vendus - a.vendus);
@@ -265,48 +270,6 @@ function renderVentes() {
   el.innerHTML = h;
 }
 
-function clients() {
-  const map = new Map();
-  for (const v of S.data.ventes) {
-    const tel = numeroWa(v.tel), nom = (v.client || "").trim();
-    if (!tel && !nom) continue;
-    const cle = tel || "nom:" + nom.toLowerCase();
-    if (!map.has(cle)) map.set(cle, { nom, tel: v.tel || "", achats: 0, total: 0, du: 0, dernier: "" });
-    const c = map.get(cle);
-    if (nom && !c.nom) c.nom = nom;
-    if (v.tel && !c.tel) c.tel = v.tel;
-    c.achats++; c.total += totalVente(v); if (!v.encaisse && !estChariow(v) && !estDepot(v)) c.du += totalVente(v);
-    if (v.date > c.dernier) c.dernier = v.date;
-  }
-  return [...map.values()].sort((a, b) => b.total - a.total);
-}
-function htmlClients() {
-  const all = clients();
-  if (!all.length) return `<div class="empty"><b>Aucun client pour l'instant</b>Quand tu notes le nom ou le numéro du client dans une vente, il apparaît ici. Tu pourras le recontacter sur WhatsApp en un geste.</div>`;
-  const q = norm(S.qc);
-  const list = all.filter(c => !q || norm(c.nom + " " + c.tel).includes(q));
-  const fideles = all.filter(c => c.achats > 1).length;
-  let h = `<div class="chips"><div class="chip"><div class="label">Clients</div><div class="v num">${all.length}</div></div>
-    <div class="chip"><div class="label">Revenus plusieurs fois</div><div class="v num">${fideles}</div></div></div>
-    <input class="search" id="q-clients" type="search" placeholder="Chercher un client…" value="${esc(S.qc)}" aria-label="Chercher un client">`;
-  if (q) h += `<div class="note">${plur(list.length, "client trouvé", "clients trouvés")}</div>`;
-  const r = S.data.reglages;
-  for (const c of list.slice(0, S.limC)) {
-    const j = Math.floor((Date.now() - dateDe(c.dernier)) / 86400000);
-    const msg = c.du > 0
-      ? `Bonjour${c.nom ? " " + c.nom : ""}, petit rappel : il reste ${F(c.du)} à régler pour tes achats.` + (r.numero ? ` Tu peux payer par Wave ou Orange Money au ${r.numero}.` : "") + " Merci !"
-      : `Bonjour${c.nom ? " " + c.nom : ""} ! J'espère que tu es satisfait(e) de ton achat. J'ai des nouveautés, tu veux que je te les montre ?`;
-    h += `<div class="row">
-      <div><div class="t">${esc(c.nom || c.tel)}${c.achats > 1 ? ` <span class="tag">Fidèle</span>` : ""}</div>
-      <div class="m num">${plur(c.achats, "achat")} · dernier ${j <= 0 ? "aujourd'hui" : "il y a " + j + " j"}${c.nom && c.tel ? " · " + esc(c.tel) : ""}</div></div>
-      <div class="amt num">${F(c.total)}${c.du > 0 ? `<div class="m" style="color:var(--gold)">doit ${F(c.du)}</div>` : ""}</div>
-      ${numeroWa(c.tel) ? `<div class="acts"><a class="mini wa" href="${lienWa(c.tel, msg)}" target="_blank" rel="noopener">${c.du > 0 ? "Relancer le paiement" : "Écrire sur WhatsApp"}</a></div>` : ""}
-    </div>`;
-  }
-  h += boutonPlus("limC", list.length - S.limC, "clients");
-  return h;
-}
-
 /* ---------- Stock : catégorie > produit > variantes ---------- */
 function texteProduit(p) {
   const r = S.data.reglages;
@@ -326,12 +289,12 @@ function ligneProduit(p, b, dansGroupe) {
     droite = !(+p.quantite) ? `<span class="tag red">À compléter</span>`
       : `${plur(b.restant, "pièce")}<div class="m">${F(b.valeur)}</div>${bas ? `<span class="tag red">Stock bas</span>` : ""}`;
   }
-  const actions = num
-    ? (p.lien ? `<a class="mini wa" href="${lienWa("", texteProduit(p))}" target="_blank" rel="noopener">Partager sur WhatsApp</a><button class="mini" data-act="copier" data-id="${p.id}">Copier le lien</button>` : "")
-    : `<button class="mini" data-act="restock" data-id="${p.id}">${depot ? "Confier plus" : "Réapprovisionner"}</button>`;
+  const actions = `<button class="mini wa" data-act="partager-produit" data-id="${p.id}">Partager</button>` + (+p.prixVente ? `<button class="mini" data-act="promo" data-id="${p.id}">${+p.prixAvant > +p.prixVente ? "Promo en cours" : "Promo"}</button>` : "") + (num
+    ? (p.lien ? `<button class="mini" data-act="copier" data-id="${p.id}">Copier le lien</button>` : "")
+    : `<button class="mini" data-act="restock" data-id="${p.id}">${depot ? "Confier plus" : "Réapprovisionner"}</button>`);
   if (depot && !p.vendeurVoitCout) meta += ` · <span class="tag">coût caché au vendeur</span>`;
   return `<div class="row compact${S.ouvert === p.id ? " open" : ""}" data-row="${p.id}" tabindex="0" aria-expanded="${S.ouvert === p.id}">
-    <div class="avec-vignette">${PHOTOS[p.id] ? `<img class="vignette" src="${PHOTOS[p.id]}" alt="">` : ""}<div style="min-width:0"><div class="t">${esc(titre)}</div><div class="m num">${meta}</div></div></div>
+    <div class="avec-vignette">${PHOTOS[p.id] ? `<img class="vignette" src="${vignette(p.id)}" alt="" loading="lazy">` : ""}<div style="min-width:0"><div class="t">${esc(titre)}${photosDe(p.id).length > 1 ? ` <span class="note">· ${photosDe(p.id).length} photos</span>` : ""}${+p.prixAvant > +p.prixVente ? ` <span class="tag red">Promo</span>` : ""}${p.horsBoutique ? ` <span class="tag">Pas en ligne</span>` : ""}${tagDodo(p.id)}</div><div class="m num">${meta}</div></div></div>
     <div class="amt num">${droite}</div>
     <div class="acts">${actions}
       <button class="mini" data-act="edit" data-id="${p.id}">Modifier</button>
@@ -341,7 +304,9 @@ function ligneProduit(p, b, dansGroupe) {
 }
 function renderStock(st) {
   const el = $("#v-stock");
-  const outils = `<div class="outils"><button class="mini" data-act="arrivage">+ Nouvel arrivage</button>${S.data.produits.length ? `<button class="mini" data-act="catalogue">Catalogue à partager</button>` : ""}</div>`;
+  majDodo();
+  const vt = reglagesVitrine();
+  const outils = `<div class="outils"><button class="mini" data-act="arrivage">+ Nouvel arrivage</button>${S.data.produits.length ? `<button class="mini" data-act="catalogue">Catalogue à partager</button><button class="mini${vt.active ? " wa" : ""}" data-act="vitrine">${vt.active ? "Boutique en ligne ✓" : "Boutique en ligne"}</button>` : ""}</div>`;
   if (!S.data.produits.length) { el.innerHTML = outils + `<div class="empty"><b>Aucun produit</b>Ajoute chaque produit avec sa catégorie (Chaussures, Tech, E-books…). Si un même produit existe en plusieurs modèles ou prix, ajoute-les comme variantes. Pour une commande de Chine, utilise « Nouvel arrivage » : l'appli répartit le transport et la douane sur chaque pièce.</div>`; return; }
   /* Regroupe par catégorie, puis par nom de produit */
   const cats = new Map();

@@ -9,14 +9,17 @@
        produits, ventes, vendeurs,       ce que le vendeur peut lire (sa partie seulement)
        versements
        produitsPrive, ventesPrive        coûts d'achat : jamais lisibles par un vendeur
-       depenses, arrivages, photos       propriétaire uniquement
+       depenses, arrivages, photos,      propriétaire uniquement
+       clients
+     vitrines/{nom}                      boutique en ligne publique (lecture libre)
+       articles, images
    Les règles de sécurité (firestore.rules) font respecter ces accès côté serveur.
    ===================================================================== */
 import * as fb from "./firebase-sdk.js";
 
 const CFG_KEY = "cahier-de-caisse:cloud";
 const DOMAINE_VENDEUR = "vendeur.example.com"; /* adresse technique : les vendeurs se connectent avec un simple identifiant */
-const COLS = ["produits", "vendeurs", "ventes", "depenses", "versements", "arrivages"];
+const COLS = ["produits", "vendeurs", "ventes", "depenses", "versements", "arrivages", "clients"];
 const PRIVE = { produits: ["cout", "baseVendeur", "note"], ventes: ["coutU"] };
 
 const C = window.Cloud = { etat: "demarrage", role: null, user: null, enAttente: 0, erreur: "" };
@@ -89,6 +92,7 @@ async function ouvrirSession(u) {
   else abonnerVendeur();
   C.etat = "actif"; prevenir();
   if (typeof window.surSession === "function") window.surSession(C.role);
+  if (C.role === "proprio" && typeof planifierVitrine === "function") planifierVitrine(3000); /* remet la boutique en ligne à jour */
 }
 function fermerSession() {
   desabos.forEach(f => { try { f(); } catch {} }); desabos = [];
@@ -121,6 +125,13 @@ async function preparerBoutique(cfg) {
     }
   }
   cfg.lie = C.user.uid; ecrireCfg(cfg);
+}
+
+/* Un document par produit : photo principale + autres. Firestore limite un document à 1 Mo : on retire les dernières si besoin */
+function docPhotos(liste) {
+  const autres = liste.slice(1);
+  while (autres.length && JSON.stringify({ data: liste[0], autres }).length > 950000) autres.pop();
+  return { data: liste[0], autres };
 }
 
 /* ================= Découpage public / privé ================= */
@@ -166,8 +177,9 @@ async function televerserTout(data, avecPhotos) {
   for (const col of COLS) for (const obj of data[col] || []) actions.push(...actionsPour(col, obj));
   await envoyer(actions);
   if (avecPhotos) {
-    const ph = Object.entries(PHOTOS).map(([id, url]) => ({ chemin: chemin("photos") + "/" + id, data: { data: url } }));
-    for (let i = 0; i < ph.length; i += 40) await envoyer(ph.slice(i, i + 40));
+    const ids = new Set([...Object.keys(PHOTOS), ...Object.keys(AUTRES)]);
+    const ph = [...ids].map(id => ({ chemin: chemin("photos") + "/" + id, data: docPhotos(photosDe(id)) }));
+    for (let i = 0; i < ph.length; i += 8) await envoyer(ph.slice(i, i + 8));
   }
 }
 async function viderEnLigne() {
@@ -190,11 +202,12 @@ function abonnerProprio() {
       const fusion = (col) => [...maps[col].values()].map(o => ({ ...o, ...(maps[col + "Prive"] ? maps[col + "Prive"].get(o.id) || {} : {}) }));
       S.data.produits = fusion("produits");
       S.data.ventes = fusion("ventes");
-      for (const col of ["vendeurs", "depenses", "versements", "arrivages"]) S.data[col] = [...maps[col].values()];
+      for (const col of ["vendeurs", "depenses", "versements", "arrivages", "clients"]) S.data[col] = [...maps[col].values()];
       normaliser(S.data);
       enregistrer();
       render();
       figerCoutsVentesVendeur(maps);
+      if (typeof planifierVitrine === "function") planifierVitrine(); /* une vente du vendeur change le stock affiché en ligne */
     }, 60);
   };
   for (const col of attendus) {
@@ -211,8 +224,9 @@ function abonnerProprio() {
     let change = false;
     snap.docChanges().forEach(ch => {
       if (ch.doc.metadata.hasPendingWrites) return;
-      const url = ch.type === "removed" ? null : ch.doc.data().data;
-      if (PHOTOS[ch.doc.id] !== (url || undefined)) { definirPhoto(ch.doc.id, url, true); change = true; }
+      const d = ch.type === "removed" ? null : ch.doc.data();
+      const liste = d ? [d.data, ...(Array.isArray(d.autres) ? d.autres : [])].filter(Boolean) : [];
+      if (liste.join("|") !== photosDe(ch.doc.id).join("|")) { definirPhotos(ch.doc.id, liste, true); change = true; }
     });
     if (change) render();
   }, () => {}));
@@ -231,7 +245,7 @@ function abonnerProprio() {
       }
       envoyer(actions);
     },
-    photo(id, url) { envoyer([url ? { chemin: chemin("photos") + "/" + id, data: { data: url } } : { chemin: chemin("photos") + "/" + id, suppr: true }]); },
+    photo(id, liste) { envoyer([liste && liste.length ? { chemin: chemin("photos") + "/" + id, data: docPhotos(liste) } : { chemin: chemin("photos") + "/" + id, suppr: true }]); },
     reglages(r) {
       envoyer([{ chemin: "boutiques/" + C.boutique, data: { reglages: propre(r), cree: Date.now() } }]);
       /* le nom et le numéro de la boutique apparaissent chez les vendeurs */
@@ -309,14 +323,94 @@ function abonnerVendeur() {
   };
   viderFileAttente();
 }
-const _photosDemandees = new Set();
-async function chargerPhotosVendeur() {
-  for (const p of S.data.produits) {
-    if (_photosDemandees.has(p.id)) continue;
-    _photosDemandees.add(p.id);
-    try { const s = await fb.getDoc(fb.doc(fs, chemin("photos") + "/" + p.id)); if (s.exists()) { PHOTOS[p.id] = s.data().data; render(); } } catch {}
+/* Photos du vendeur : une écoute par produit confié (il ne peut pas lister toute la collection).
+   Gardées en mémoire seulement : rien ne reste sur son téléphone si l'accès est retiré. */
+const _ecoutesPhotos = new Map();
+function chargerPhotosVendeur() {
+  const ids = new Set(S.data.produits.map(p => p.id));
+  for (const [id, stop] of _ecoutesPhotos) if (!ids.has(id)) {
+    try { stop(); } catch {}
+    _ecoutesPhotos.delete(id);
+    for (const ph of photosDe(id)) oublierUrl(ph);
+    delete PHOTOS[id]; delete AUTRES[id];
+  }
+  for (const id of ids) {
+    if (_ecoutesPhotos.has(id)) continue;
+    const stop = fb.onSnapshot(fb.doc(fs, chemin("photos") + "/" + id), s => {
+      const d = s.exists() ? s.data() : {};
+      const liste = [d.data, ...(Array.isArray(d.autres) ? d.autres : [])].filter(x => typeof x === "string" && x.startsWith("data:image/"));
+      if (liste.join("|") === photosDe(id).join("|")) return;
+      for (const ph of photosDe(id)) if (!liste.includes(ph)) oublierUrl(ph);
+      if (liste[0]) PHOTOS[id] = liste[0]; else delete PHOTOS[id];
+      if (liste.length > 1) AUTRES[id] = liste.slice(1); else delete AUTRES[id];
+      clearTimeout(chargerPhotosVendeur.t); chargerPhotosVendeur.t = setTimeout(render, 80);
+    }, () => {});
+    _ecoutesPhotos.set(id, stop);
+    desabos.push(() => { try { stop(); } catch {} _ecoutesPhotos.delete(id); });
   }
 }
+
+/* ================= Boutique en ligne (vitrine publique) =================
+   vitrines/{nom}            nom, numéro WhatsApp, message, index des articles publiés (empreintes)
+     articles/{id}           fiche d'un produit (avec une petite photo) : lu par la page boutique.html
+     images/{id}             grandes photos, chargées seulement quand un client ouvre le produit
+   Lecture libre pour tout le monde ; écriture réservée au propriétaire de la vitrine.
+   Seul ce qui a changé est renvoyé : l'index garde l'empreinte de chaque article. */
+const empreinte = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36) + s.length.toString(36); };
+async function envoyerOuEchouer(actions, parLot) {
+  for (let i = 0; i < actions.length; i += parLot) {
+    const batch = fb.writeBatch(fs);
+    for (const a of actions.slice(i, i + parLot)) a.suppr ? batch.delete(fb.doc(fs, a.chemin)) : batch.set(fb.doc(fs, a.chemin), a.data);
+    C.enAttente++; prevenir();
+    try { await batch.commit(); } finally { C.enAttente--; prevenir(); }
+  }
+}
+function photosTenant(liste) {
+  const l = liste.slice(0, 4);
+  while (l.length > 1 && JSON.stringify(l).length > 950000) l.pop();
+  return l;
+}
+C.publierVitrine = async ({ nom, ancien, racine, articles, images }) => {
+  if (C.role !== "proprio" || !C.user) { const e = new Error("Connecte-toi d'abord (Réglages → Synchronisation)."); e.code = "hors-ligne"; throw e; }
+  const ref = fb.doc(fs, "vitrines", nom), base = "vitrines/" + nom + "/";
+  const snap = await fb.getDoc(ref);
+  if (snap.exists() && snap.data().proprio !== C.user.uid) { const e = new Error("Ce nom de boutique est déjà pris. Choisis-en un autre."); e.code = "vitrine-prise"; throw e; }
+  const avant = snap.exists() ? (snap.data().index || {}) : {};
+  const index = {}, legers = [], lourds = [], retraits = [];
+  for (const a of articles) {
+    const ha = empreinte(JSON.stringify(a)), hi = images[a.id] && images[a.id].length ? empreinte(images[a.id].join("|")) : "";
+    index[a.id] = ha + "." + hi;
+    const [pa, pi] = String(avant[a.id] || ".").split(".");
+    if (pa !== ha) legers.push({ chemin: base + "articles/" + a.id, data: a });
+    if (pi !== hi) lourds.push(hi ? { chemin: base + "images/" + a.id, data: { photos: photosTenant(images[a.id]) } } : { chemin: base + "images/" + a.id, suppr: true });
+  }
+  for (const id in avant) if (!index[id]) retraits.push({ chemin: base + "articles/" + id, suppr: true }, { chemin: base + "images/" + id, suppr: true });
+  const signature = empreinte(JSON.stringify([racine, index]));
+  const changements = legers.length + lourds.length + retraits.length;
+  if (snap.exists() && snap.data().signature === signature && !changements) return { nb: articles.length, envoyes: 0, retires: 0 };
+  const doc = { ...racine, proprio: C.user.uid, index, signature, nb: articles.length, maj: Date.now() };
+  /* la fiche de la vitrine d'abord : les règles vérifient le propriétaire avant d'accepter les articles */
+  if (!snap.exists()) await fb.setDoc(ref, { ...doc, index: {}, signature: "" });
+  await envoyerOuEchouer(legers, 100);
+  await envoyerOuEchouer(lourds, 6);     /* une requête Firestore ne dépasse pas 10 Mo */
+  await envoyerOuEchouer(retraits, 400);
+  await fb.setDoc(ref, doc);             /* l'index en dernier : si l'envoi est coupé, la prochaine fois reprend */
+  if (ancien && ancien !== nom) await C.retirerVitrine(ancien).catch(() => {});
+  return { nb: articles.length, envoyes: legers.length + lourds.length, retires: retraits.length / 2 };
+};
+C.retirerVitrine = async nom => {
+  if (!nom || !C.user) return;
+  const ref = fb.doc(fs, "vitrines", nom), snap = await fb.getDoc(ref);
+  if (!snap.exists() || snap.data().proprio !== C.user.uid) return;
+  const actions = [];
+  for (const id in (snap.data().index || {})) actions.push({ chemin: "vitrines/" + nom + "/articles/" + id, suppr: true }, { chemin: "vitrines/" + nom + "/images/" + id, suppr: true });
+  await envoyerOuEchouer(actions, 400);
+  await fb.deleteDoc(ref); /* en dernier : les règles lisent cette fiche pour autoriser les suppressions ci-dessus */
+};
+C.nomVitrineLibre = async nom => {
+  const s = await fb.getDoc(fb.doc(fs, "vitrines", nom));
+  return !s.exists() || s.data().proprio === (C.user && C.user.uid);
+};
 
 /* ================= Comptes ================= */
 C.connecter = (identifiant, mdp) => fb.signInWithEmailAndPassword(auth, C.emailDe(identifiant), mdp);

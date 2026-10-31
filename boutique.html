@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Boutique en ligne</title>
+<meta name="description" content="Découvre nos produits avec photos et prix, et commande directement sur WhatsApp.">
+<meta name="theme-color" content="#0d6b57">
+<meta property="og:title" content="Notre boutique en ligne">
+<meta property="og:description" content="Découvre nos produits avec photos et prix, et commande directement sur WhatsApp.">
+<meta property="og:image" content="icon-512.png">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{
+  --c:#0d6b57; --c-doux:#dcefe8; --c-ink:#ffffff;
+  --bg:#f4f5f2; --surface:#ffffff; --ink:#15211d; --muted:#5f6b66; --line:#e1e6e2;
+  --rouge:#c2352a; --wa:#1fa855; --ombre:0 1px 2px rgba(0,0,0,.06),0 4px 14px rgba(0,0,0,.05);
+  --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --display:ui-rounded,"SF Pro Rounded","Segoe UI",Roboto,system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1412; --surface:#19201d; --ink:#e8efeb; --muted:#9daca6; --line:#2a3430; --ombre:0 1px 2px rgba(0,0,0,.4);
+  color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 var(--body);-webkit-tap-highlight-color:transparent}
+img{display:block;max-width:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.cache{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* En-tête */
+.haut{position:sticky;top:0;z-index:20;background:var(--c);color:var(--c-ink);padding:max(10px,env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 0 rgba(0,0,0,.08)}
+.logo{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.18);display:grid;place-items:center;font:800 16px var(--display);flex:none}
+.haut h1{font:800 19px/1.15 var(--display);margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.haut .sous{font-size:12.5px;opacity:.85;font-weight:500;display:block}
+.bt-wa-haut{display:inline-flex;align-items:center;gap:6px;background:#fff;color:#0b3d2b;border:0;border-radius:999px;padding:8px 13px;font-weight:700;font-size:14px;text-decoration:none;flex:none}
+.bt-wa-haut svg{width:18px;height:18px;fill:var(--wa)}
+
+main{max-width:1080px;margin:0 auto;padding:14px 16px 120px}
+.accueil{background:var(--c-doux);color:var(--ink);border-radius:16px;padding:12px 14px;font-size:15px;margin-bottom:12px}
+@media (prefers-color-scheme:dark){.accueil{background:var(--surface);border:1px solid var(--line)}}
+.recherche{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:14px;padding:12px 14px 12px 40px;font:inherit;font-size:16px;outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23889590' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:13px 50%}
+.recherche:focus{border-color:var(--c);box-shadow:0 0 0 3px var(--c-doux)}
+.cats{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.cats::-webkit-scrollbar{display:none}
+.cats button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-size:14px;font-weight:600}
+.cats button[aria-pressed=true]{background:var(--c);border-color:var(--c);color:var(--c-ink)}
+.compte{color:var(--muted);font-size:13.5px;margin:10px 2px}
+
+/* Grille */
+.grille{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (min-width:640px){.grille{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}}
+@media (min-width:920px){.grille{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.carte{background:var(--surface);border-radius:16px;overflow:hidden;box-shadow:var(--ombre);text-decoration:none;display:flex;flex-direction:column;border:1px solid var(--line);transition:transform .12s}
+.carte:active{transform:scale(.98)}
+.carte .ph{position:relative;aspect-ratio:1/1;background:var(--c-doux);overflow:hidden}
+.carte .ph img{width:100%;height:100%;object-fit:cover}
+.initiales{width:100%;height:100%;display:grid;place-items:center;font:800 34px var(--display);color:var(--c)}
+.badges{position:absolute;left:8px;top:8px;display:flex;flex-wrap:wrap;gap:5px;right:8px}
+.badge{background:var(--ink);color:#fff;font-size:11.5px;font-weight:800;padding:3px 8px;border-radius:999px;letter-spacing:.01em}
+@media (prefers-color-scheme:dark){.badge{background:#0b0f0d}}
+.badge.rouge{background:var(--rouge)}
+.badge.c{background:var(--c)}
+.carte.epuise .ph img,.carte.epuise .initiales{opacity:.45;filter:grayscale(.6)}
+.carte .info{padding:10px 11px 12px;display:flex;flex-direction:column;gap:3px;flex:1}
+.carte .nom{font-weight:700;font-size:14.5px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.carte .prix{font:800 16px var(--display);margin-top:auto;padding-top:4px}
+.carte .prix s{font:500 12.5px var(--body);color:var(--muted);margin-left:5px}
+.carte .var{font-size:12.5px;color:var(--muted)}
+
+.vide{text-align:center;color:var(--muted);padding:40px 16px}
+.vide b{display:block;color:var(--ink);font-size:17px;margin-bottom:6px}
+.squelette .ph{background:linear-gradient(90deg,var(--line),var(--surface),var(--line));background-size:200% 100%;animation:sk 1.2s infinite}
+.squelette .l{height:12px;border-radius:6px;background:var(--line);margin:4px 0}
+@keyframes sk{to{background-position:-200% 0}}
+.pied{text-align:center;color:var(--muted);font-size:12.5px;margin-top:28px}
+
+/* Boutons */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:14px;padding:14px 16px;font-weight:800;font-size:16px;text-decoration:none}
+.btn svg{width:20px;height:20px;fill:currentColor}
+.btn.wa{background:var(--wa);color:#fff}
+.btn.pri{background:var(--c);color:var(--c-ink)}
+.btn.sec{background:var(--surface);border:1.5px solid var(--line);color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* Fiche produit (plein écran) */
+.couche{position:fixed;inset:0;z-index:40;background:var(--bg);overflow-y:auto;overscroll-behavior:contain;animation:monte .18s ease-out}
+@keyframes monte{from{transform:translateY(24px)}}
+@media (prefers-reduced-motion:reduce){.couche{animation:none}}
+.fiche{max-width:760px;margin:0 auto;padding-bottom:140px}
+.fiche-barre{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;padding:max(10px,env(safe-area-inset-top)) 12px 10px;pointer-events:none}
+.rond{pointer-events:auto;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.92);color:#15211d;display:grid;place-items:center;box-shadow:0 1px 6px rgba(0,0,0,.18)}
+.rond svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.carrousel{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;margin-top:-62px;background:var(--c-doux);scrollbar-width:none}
+.carrousel::-webkit-scrollbar{display:none}
+.carrousel>*{flex:none;width:100%;aspect-ratio:1/1;scroll-snap-align:center}
+.carrousel img{width:100%;height:100%;object-fit:cover}
+@media (min-width:760px){.carrousel{border-radius:0 0 20px 20px}}
+.points{display:flex;justify-content:center;gap:6px;padding:10px 0 0}
+.points i{width:7px;height:7px;border-radius:50%;background:var(--line);transition:all .2s}
+.points i.on{background:var(--c);width:20px;border-radius:4px}
+.corps{padding:14px 18px 0}
+.corps .cat{color:var(--muted);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.corps h2{font:800 25px/1.2 var(--display);margin:4px 0 8px}
+.prixg{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 10px;margin-bottom:12px}
+.prixg b{font:800 28px var(--display)}
+.prixg s{color:var(--muted);font-size:17px}
+.etat{font-size:14px;font-weight:600;margin-bottom:14px}
+.etat.ok{color:var(--wa)} .etat.peu{color:#b46a00} .etat.non{color:var(--rouge)}
+.lab{font-weight:700;font-size:14px;margin:14px 0 8px}
+.choix{display:flex;flex-wrap:wrap;gap:8px}
+.choix button{border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:9px 13px;font-size:14.5px;font-weight:600;text-align:left}
+.choix button small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+.choix button[aria-pressed=true]{border-color:var(--c);box-shadow:0 0 0 2px var(--c) inset}
+.choix button:disabled{opacity:.45;text-decoration:line-through}
+.qte{display:inline-flex;align-items:center;border:1.5px solid var(--line);border-radius:12px;background:var(--surface)}
+.qte button{width:44px;height:44px;border:0;background:none;font-size:22px;font-weight:700}
+.qte span{min-width:36px;text-align:center;font-weight:800;font-size:17px}
+.desc{white-space:pre-line;color:var(--ink);margin:16px 0 4px;font-size:15.5px}
+.actions{position:fixed;left:0;right:0;bottom:0;z-index:3;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px max(12px,env(safe-area-inset-bottom));display:flex;gap:10px}
+.actions .btn{flex:1}
+.couche .actions{max-width:760px;margin:0 auto}
+
+/* Panier */
+.barre-panier{position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:30;max-width:560px;margin:0 auto;background:var(--ink);color:var(--bg);border:0;border-radius:16px;padding:13px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-weight:700}
+.barre-panier .n{background:var(--c);color:var(--c-ink);border-radius:999px;min-width:26px;height:26px;display:grid;place-items:center;font-size:13.5px;padding:0 7px}
+.barre-panier .t{flex:1;text-align:left}
+.panier{max-width:640px;margin:0 auto;padding:max(14px,env(safe-area-inset-top)) 16px 170px}
+.panier-tete{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.panier-tete h2{font:800 22px var(--display);margin:0;flex:1}
+.ligne{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:10px}
+.ligne img,.ligne .mini-ph{width:58px;height:58px;border-radius:10px;object-fit:cover;flex:none;background:var(--c-doux)}
+.ligne .mini-ph{display:grid;place-items:center;font:800 18px var(--display);color:var(--c)}
+.ligne .d{flex:1;min-width:0}
+.ligne .d .n{font-weight:700;font-size:14.5px;line-height:1.25}
+.ligne .d .v{color:var(--muted);font-size:13px}
+.ligne .d .p{font-weight:800;margin-top:2px}
+.ligne .qte button{width:36px;height:36px;font-size:19px}
+.ligne .qte span{min-width:26px;font-size:15px}
+.total{display:flex;justify-content:space-between;font:800 19px var(--display);padding:10px 4px 14px}
+.champ{display:block;margin-bottom:10px}
+.champ span{display:block;font-size:13.5px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.champ input,.champ textarea{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:11px 12px;font:inherit;font-size:16px;outline:none}
+.champ input:focus,.champ textarea:focus{border-color:var(--c)}
+.note{color:var(--muted);font-size:13px}
+.lien-sec{background:none;border:0;color:var(--muted);text-decoration:underline;font-size:14px;padding:8px;display:block;margin:8px auto 0}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14.5px;z-index:60;max-width:90vw;text-align:center}
+.erreur{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:24px 18px;text-align:center}
+:focus-visible{outline:3px solid var(--c);outline-offset:2px}
+</style>
+</head>
+<body>
+<header class="haut" id="haut">
+  <div class="logo" id="logo" aria-hidden="true">·</div>
+  <h1 id="titre">Boutique<span class="sous" id="sous-titre">Chargement…</span></h1>
+  <a class="bt-wa-haut" id="wa-haut" href="#" target="_blank" rel="noopener" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.8 14.2c-.2.7-1.4 1.3-2 1.4-.5.1-1.2.1-1.9-.1a17 17 0 0 1-1.7-.6 13.4 13.4 0 0 1-5.1-4.5c-.6-.8-1.1-1.8-1.1-2.9s.6-1.6.8-1.9c.2-.2.5-.3.6-.3h.5c.1 0 .4 0 .6.4l.8 2c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.2.3.7 1.2 1.6 2a7.3 7.3 0 0 0 2.2 1.4c.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.1.1.7-.1 1.3Z"/></svg>WhatsApp</a>
+</header>
+<main id="app" aria-live="polite"></main>
+<div id="zone-fiche"></div>
+<div id="zone-panier"></div>
+<button class="barre-panier" id="barre-panier" hidden><span class="n" id="bp-n">0</span><span class="t">Voir mon panier</span><span class="num" id="bp-total"></span></button>
+<div class="toast" id="toast" hidden role="status"></div>
+<script src="config.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   Boutique en ligne : lit la vitrine publiée par le Cahier de Caisse
+   (Firestore, lecture publique) et envoie les commandes sur WhatsApp.
+   Aucune donnée privée n'est lue ici : seulement prix, photos, descriptions.
+   ============================================================ */
+const ICONE_WA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.8 14.2c-.2.7-1.4 1.3-2 1.4-.5.1-1.2.1-1.9-.1a17 17 0 0 1-1.7-.6 13.4 13.4 0 0 1-5.1-4.5c-.6-.8-1.1-1.8-1.1-2.9s.6-1.6.8-1.9c.2-.2.5-.3.6-.3h.5c.1 0 .4 0 .6.4l.8 2c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.2.3.7 1.2 1.6 2a7.3 7.3 0 0 0 2.2 1.4c.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.1.1.7-.1 1.3Z"/></svg>';
+const SVG = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = new Intl.NumberFormat("fr-FR");
+const F = n => fmt.format(Math.round(+n || 0)).replace(/ | /g, " ") + " F";
+const norm = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const initiales = s => String(s || "?").split(/\s+/).map(m => m[0] || "").join("").slice(0, 2).toUpperCase();
+const stocker = { lire(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } }, ecrire(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } } };
+function toast(t) { const el = $("#toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 2200); }
+
+/* ---------- Accès à la vitrine (Firestore, API REST publique) ---------- */
+const CFG = (() => {
+  const q = new URLSearchParams(location.search);
+  if (q.get("projet")) return { projectId: q.get("projet"), apiKey: q.get("cle") || "" };
+  return window.CONFIG_FIREBASE || null;
+})();
+const BASE = CFG ? (CFG.restBase || `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(CFG.projectId)}/databases/(default)/documents/`) : "";
+function valeur(v) {
+  if (!v) return null;
+  if ("stringValue" in v) return v.stringValue;
+  if ("integerValue" in v) return +v.integerValue;
+  if ("doubleValue" in v) return +v.doubleValue;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("mapValue" in v) return champs(v.mapValue.fields || {});
+  if ("arrayValue" in v) return (v.arrayValue.values || []).map(valeur);
+  if ("timestampValue" in v) return v.timestampValue;
+  return null;
+}
+const champs = f => Object.fromEntries(Object.entries(f || {}).map(([k, v]) => [k, valeur(v)]));
+const versObjet = d => d ? Object.assign(champs(d.fields), { _id: d.name.split("/").pop() }) : null;
+async function lire(chemin, params) {
+  const q = [CFG && CFG.apiKey ? "key=" + encodeURIComponent(CFG.apiKey) : "", params || ""].filter(Boolean).join("&");
+  const r = await fetch(BASE + chemin + (q ? "?" + q : ""), { cache: "no-store" });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+async function lireListe(chemin, params) {
+  let docs = [], jeton = "";
+  for (let i = 0; i < 20; i++) {
+    const j = await lire(chemin, ["pageSize=300", params || "", jeton ? "pageToken=" + encodeURIComponent(jeton) : ""].filter(Boolean).join("&"));
+    if (!j) break;
+    docs = docs.concat((j.documents || []).map(versObjet));
+    if (!j.nextPageToken) break;
+    jeton = j.nextPageToken;
+  }
+  return docs;
+}
+
+/* ---------- État ---------- */
+const S = { nom: "", boutique: null, articles: [], cat: "Tout", q: "", panier: [], ouvert: null, choix: {}, images: {} };
+const cleCache = () => "boutique-cache:" + S.nom, clePanier = () => "boutique-panier:" + S.nom, cleClient = "boutique-client";
+const lireRoute = () => { const h = decodeURIComponent(location.hash.slice(1)); const [nom, article] = h.split("/"); return { nom: (nom || "").toLowerCase(), article: article || "" }; };
+
+/* ---------- Couleur de la boutique ---------- */
+function melanger(hex, blanc) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return "#dcefe8";
+  const n = parseInt(m[1], 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(x => Math.round(x + (255 - x) * blanc));
+  return "#" + c.map(x => x.toString(16).padStart(2, "0")).join("");
+}
+function appliquerCouleur(c) {
+  if (!/^#[0-9a-f]{6}$/i.test(c || "")) return;
+  document.documentElement.style.setProperty("--c", c);
+  document.documentElement.style.setProperty("--c-doux", melanger(c, 0.86));
+  document.querySelector('meta[name="theme-color"]').setAttribute("content", c);
+}
+
+/* ---------- Prix et disponibilité ---------- */
+const prixTexte = a => !a.prixMin ? "" : a.prixMin === a.prixMax ? F(a.prixMin) : "dès " + F(a.prixMin);
+const variantes = a => Array.isArray(a.variantes) && a.variantes.length ? a.variantes : [{ nom: "", prix: a.prixMin, avant: 0, dispo: !a.epuise }];
+function badges(a) {
+  const b = [];
+  if (a.epuise) b.push(`<span class="badge">Épuisé</span>`);
+  else {
+    if (a.remise >= 5) b.push(`<span class="badge rouge">-${a.remise} %</span>`);
+    if (a.nouveau) b.push(`<span class="badge c">Nouveau</span>`);
+    if (a.peu) b.push(`<span class="badge">Dernières pièces</span>`);
+  }
+  return b.join("");
+}
+const lienWa = texte => "https://wa.me/" + (S.boutique.whatsapp || "") + "?text=" + encodeURIComponent(texte);
+const urlArticle = a => location.origin + location.pathname + location.search + "#" + S.nom + "/" + a.id;
+
+/* ---------- Liste des produits ---------- */
+function rendreListe() {
+  const app = $("#app"), b = S.boutique;
+  const cats = ["Tout", ...(b.categories && b.categories.length ? b.categories : [...new Set(S.articles.map(a => a.categorie))])];
+  if (!cats.includes(S.cat)) S.cat = "Tout";
+  const q = norm(S.q).trim();
+  const liste = S.articles.filter(a => (S.cat === "Tout" || a.categorie === S.cat) && (!q || norm([a.nom, a.categorie, a.description, ...variantes(a).map(v => v.nom)].join(" ")).includes(q)));
+  let h = b.accueil ? `<div class="accueil">${esc(b.accueil)}</div>` : "";
+  h += `<label class="cache" for="recherche">Chercher un produit</label><input class="recherche" id="recherche" type="search" placeholder="Chercher un produit…" value="${esc(S.q)}" autocomplete="off">`;
+  if (cats.length > 2) h += `<div class="cats" role="group" aria-label="Catégories">${cats.map(c => `<button data-cat="${esc(c)}" aria-pressed="${c === S.cat}">${esc(c)}</button>`).join("")}</div>`;
+  h += `<div class="compte num">${liste.length} article${liste.length > 1 ? "s" : ""}${q ? ` pour « ${esc(S.q)} »` : ""}</div>`;
+  if (!S.articles.length) h += `<div class="vide"><b>La boutique se prépare</b>Les produits arrivent bientôt. Écris-nous sur WhatsApp pour savoir ce qui est disponible.</div>`;
+  else if (!liste.length) h += `<div class="vide"><b>Aucun produit trouvé</b>Essaie un autre mot, ou demande-nous directement sur WhatsApp.</div>`;
+  h += `<div class="grille">${liste.map(a => `<a class="carte${a.epuise ? " epuise" : ""}" href="#${esc(S.nom)}/${esc(a.id)}" data-article="${esc(a.id)}">
+      <div class="ph">${a.vignette ? `<img src="${a.vignette}" alt="${esc(a.nom)}" loading="lazy" decoding="async">` : `<div class="initiales">${esc(initiales(a.nom))}</div>`}<div class="badges">${badges(a)}</div></div>
+      <div class="info"><div class="nom">${esc(a.nom)}</div>${variantes(a).length > 1 ? `<div class="var">${variantes(a).length} modèles</div>` : ""}
+      <div class="prix num">${prixTexte(a)}${a.prixMin === a.prixMax && variantes(a)[0].avant ? `<s>${F(variantes(a)[0].avant)}</s>` : ""}</div></div></a>`).join("")}</div>`;
+  if (b.maj) h += `<div class="pied">Mis à jour le ${new Date(b.maj).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} · Commande et paiement sur WhatsApp</div>`;
+  const focus = document.activeElement && document.activeElement.id === "recherche", pos = focus ? document.activeElement.selectionStart : 0;
+  app.innerHTML = h;
+  if (focus) { const r = $("#recherche"); r.focus(); try { r.setSelectionRange(pos, pos); } catch {} }
+}
+function rendreEntete() {
+  const b = S.boutique;
+  document.title = b.nom + " · Boutique en ligne";
+  $("#logo").textContent = initiales(b.nom);
+  $("#titre").innerHTML = esc(b.nom) + `<span class="sous">${S.articles.filter(a => !a.epuise).length} articles disponibles</span>`;
+  const wa = $("#wa-haut");
+  if (b.whatsapp) { wa.hidden = false; wa.href = lienWa(`Bonjour ${b.nom} ! Je viens de ta boutique en ligne, j'ai une question.`); } else wa.hidden = true;
+  appliquerCouleur(b.couleur);
+}
+
+/* ---------- Fiche d'un produit ---------- */
+function choixDe(a) {
+  const vs = variantes(a);
+  let i = S.choix[a.id];
+  if (i === undefined || !vs[i]) { i = vs.findIndex(v => v.dispo); if (i < 0) i = 0; S.choix[a.id] = i; }
+  return { i, v: vs[i], vs };
+}
+async function chargerImages(a) {
+  if (S.images[a.id] || !a.nbPhotos) return;
+  try {
+    const d = versObjet(await lire("vitrines/" + S.nom + "/images/" + a.id));
+    if (d && Array.isArray(d.photos)) { S.images[a.id] = d.photos; if (S.ouvert === a.id) rendreCarrousel(a); }
+  } catch {}
+}
+function rendreCarrousel(a) {
+  const el = $("#carrousel"); if (!el) return;
+  const photos = S.images[a.id] || (a.vignette ? [a.vignette] : []);
+  el.innerHTML = photos.length ? photos.map((p, i) => `<div><img src="${p}" alt="${esc(a.nom)}, photo ${i + 1}" ${i ? 'loading="lazy"' : ""}></div>`).join("") : `<div class="initiales" style="font-size:72px">${esc(initiales(a.nom))}</div>`;
+  $("#points").innerHTML = photos.length > 1 ? photos.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("") : "";
+}
+function ouvrirFiche(id) {
+  const a = S.articles.find(x => x.id === id);
+  if (!a) { fermerFiche(true); return; }
+  S.ouvert = id;
+  const { i, v, vs } = choixDe(a);
+  const qte = S.qte || 1;
+  const prixV = v.prix || a.prixMin, avant = v.avant || 0;
+  const etat = !v.dispo ? `<div class="etat non">Épuisé pour le moment</div>` : a.numerique ? `<div class="etat ok">Disponible tout de suite</div>` : a.peu ? `<div class="etat peu">Plus que quelques pièces</div>` : `<div class="etat ok">Disponible</div>`;
+  const plusieurs = vs.length > 1 || (vs[0] && vs[0].nom);
+  const z = $("#zone-fiche");
+  z.innerHTML = `<div class="couche" id="couche-fiche" role="dialog" aria-modal="true" aria-label="${esc(a.nom)}"><div class="fiche">
+    <div class="fiche-barre"><button class="rond" data-fermer aria-label="Retour">${SVG('<path d="M15 5l-7 7 7 7"/>')}</button><button class="rond" data-partager aria-label="Partager ce produit">${SVG('<path d="M12 3v12M7 8l5-5 5 5M5 14v5h14v-5"/>')}</button></div>
+    <div class="carrousel" id="carrousel"></div><div class="points" id="points"></div>
+    <div class="corps">
+      <div class="cat">${esc(a.categorie)}</div>
+      <h2>${esc(a.nom)}</h2>
+      <div class="prixg num"><b>${F(prixV)}</b>${avant ? `<s>${F(avant)}</s><span class="badge rouge">-${Math.round((1 - prixV / avant) * 100)} %</span>` : ""}</div>
+      ${etat}
+      ${plusieurs ? `<div class="lab">${vs.length > 1 ? "Choisis ton modèle" : "Modèle"}</div><div class="choix">${vs.map((x, k) => `<button data-variante="${k}" aria-pressed="${k === i}" ${x.dispo ? "" : "disabled"}>${esc(x.nom || "Modèle standard")}${x.prix !== a.prixMin || a.prixMin !== a.prixMax ? `<small class="num">${F(x.prix)}</small>` : ""}${x.dispo ? "" : "<small>épuisé</small>"}</button>`).join("")}</div>` : ""}
+      ${!a.numerique && v.dispo ? `<div class="lab">Quantité</div><div class="qte"><button data-qte="-1" aria-label="Moins">−</button><span class="num" id="qte">${qte}</span><button data-qte="1" aria-label="Plus">+</button></div>` : ""}
+      ${a.description ? `<div class="desc">${esc(a.description)}</div>` : ""}
+    </div>
+    <div class="actions">${a.numerique && a.lien
+      ? `<a class="btn pri" href="${esc(a.lien)}" target="_blank" rel="noopener">Acheter maintenant</a><a class="btn sec" style="flex:none;width:auto" href="${lienWa(`Bonjour ${S.boutique.nom} ! J'ai une question sur « ${a.nom} ».`)}" target="_blank" rel="noopener" aria-label="Poser une question sur WhatsApp">${ICONE_WA}</a>`
+      : v.dispo ? `<button class="btn sec" data-ajouter>Ajouter au panier</button><a class="btn wa" data-commander href="#">${ICONE_WA}Commander</a>`
+      : `<a class="btn wa" href="${lienWa(`Bonjour ${S.boutique.nom} ! « ${a.nom}${v.nom ? " (" + v.nom + ")" : ""} » est épuisé sur la boutique. Tu en auras bientôt ?`)}" target="_blank" rel="noopener">${ICONE_WA}Me prévenir du retour</a>`}</div>
+  </div></div>`;
+  document.body.style.overflow = "hidden";
+  rendreCarrousel(a);
+  majLienCommande(a);
+  chargerImages(a);
+  $("#carrousel").addEventListener("scroll", e => {
+    const k = Math.round(e.target.scrollLeft / e.target.clientWidth);
+    document.querySelectorAll("#points i").forEach((p, j) => p.classList.toggle("on", j === k));
+  }, { passive: true });
+  const f = $("#couche-fiche"); f.scrollTop = 0; f.focus && f.focus();
+}
+function texteCommandeDirecte(a) {
+  const { v } = choixDe(a), q = S.qte || 1;
+  return `Bonjour ${S.boutique.nom} ! Je voudrais commander :\n\n• ${q} × ${a.nom}${v.nom ? " (" + v.nom + ")" : ""} — ${F(v.prix * q)}\n\nC'est disponible ?\n\nVu sur ta boutique : ${urlArticle(a)}`;
+}
+function majLienCommande(a) { const l = document.querySelector("[data-commander]"); if (l) { l.href = lienWa(texteCommandeDirecte(a)); l.target = "_blank"; l.rel = "noopener"; } }
+function fermerFiche(remplacer) {
+  S.ouvert = null; S.qte = 1; $("#zone-fiche").innerHTML = ""; document.body.style.overflow = "";
+  const h = "#" + S.nom;
+  /* Retour arrière seulement si c'est nous qui avons ouvert la fiche : un client arrivé par un lien partagé reste sur la boutique */
+  if (location.hash !== h) { if (remplacer || !S.pousse) history.replaceState(null, "", h); else history.back(); }
+  S.pousse = false;
+}
+
+/* ---------- Panier ---------- */
+const cleLigne = l => l.id + "|" + l.variante;
+function sauverPanier() { stocker.ecrire(clePanier(), S.panier); majBarrePanier(); }
+function totalPanier() { return S.panier.reduce((s, l) => s + l.prix * l.qte, 0); }
+function nbPanier() { return S.panier.reduce((s, l) => s + l.qte, 0); }
+function majBarrePanier() {
+  const n = nbPanier(), b = $("#barre-panier");
+  b.hidden = !n || !!$("#couche-panier");
+  $("#bp-n").textContent = n; $("#bp-total").textContent = F(totalPanier());
+}
+function ajouterAuPanier(a) {
+  const { v } = choixDe(a), q = S.qte || 1;
+  const l = { id: a.id, nom: a.nom, variante: v.nom || "", prix: v.prix, qte: q, vignette: "" };
+  const ex = S.panier.find(x => cleLigne(x) === cleLigne(l));
+  if (ex) { ex.qte += q; ex.prix = v.prix; } else S.panier.push(l);
+  sauverPanier(); toast("Ajouté au panier");
+}
+/* Panier de l'ancienne visite : on remet les prix du jour et on retire ce qui n'existe plus */
+function rafraichirPanier() {
+  S.panier = (S.panier || []).filter(l => {
+    const a = S.articles.find(x => x.id === l.id); if (!a || a.epuise) return false;
+    const v = variantes(a).find(x => (x.nom || "") === l.variante); if (!v || !v.dispo) return false;
+    l.prix = v.prix; l.nom = a.nom; return true;
+  });
+  sauverPanier();
+}
+function texteCommandePanier(f) {
+  let t = `Bonjour ${S.boutique.nom} ! Je voudrais commander :\n\n`;
+  for (const l of S.panier) t += `• ${l.qte} × ${l.nom}${l.variante ? " (" + l.variante + ")" : ""} — ${F(l.prix * l.qte)}\n`;
+  t += `\nTotal : ${F(totalPanier())}\n`;
+  if (f.nom) t += `\nNom : ${f.nom}`;
+  if (f.lieu) t += `\nLivraison à : ${f.lieu}`;
+  if (f.note) t += `\nRemarque : ${f.note}`;
+  t += `\n\n(Commande passée sur ta boutique en ligne)`;
+  return t;
+}
+function ouvrirPanier() {
+  const client = stocker.lire(cleClient) || {};
+  const z = $("#zone-panier");
+  const lignes = S.panier.map((l, k) => {
+    const a = S.articles.find(x => x.id === l.id);
+    return `<div class="ligne">${a && a.vignette ? `<img src="${a.vignette}" alt="">` : `<div class="mini-ph">${esc(initiales(l.nom))}</div>`}
+      <div class="d"><div class="n">${esc(l.nom)}</div>${l.variante ? `<div class="v">${esc(l.variante)}</div>` : ""}<div class="p num">${F(l.prix * l.qte)}</div></div>
+      <div class="qte"><button data-lqte="${k}" data-d="-1" aria-label="Moins">${l.qte > 1 ? "−" : SVG('<path d="M5 7h14M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" style="fill:none;stroke:currentColor;stroke-width:2"/>')}</button><span class="num">${l.qte}</span><button data-lqte="${k}" data-d="1" aria-label="Plus">+</button></div></div>`;
+  }).join("");
+  z.innerHTML = `<div class="couche" id="couche-panier" role="dialog" aria-modal="true" aria-label="Mon panier"><div class="panier">
+    <div class="panier-tete"><button class="rond" data-fermer-panier aria-label="Retour">${SVG('<path d="M15 5l-7 7 7 7"/>')}</button><h2>Mon panier</h2></div>
+    ${S.panier.length ? lignes + `<div class="total num"><span>Total</span><span>${F(totalPanier())}</span></div>
+      <label class="champ"><span>Ton nom (facultatif)</span><input id="c-nom" autocomplete="name" value="${esc(client.nom || "")}"></label>
+      <label class="champ"><span>Quartier ou commune pour la livraison (facultatif)</span><input id="c-lieu" autocomplete="address-level2" value="${esc(client.lieu || "")}"></label>
+      <label class="champ"><span>Une remarque ? (facultatif)</span><textarea id="c-note" rows="2"></textarea></label>
+      <p class="note">En touchant le bouton, WhatsApp s'ouvre avec ta commande déjà écrite : tu n'as plus qu'à l'envoyer. Le paiement se règle ensuite directement avec la boutique.</p>
+      <button class="lien-sec" data-vider>Vider le panier</button>`
+      : `<div class="vide"><b>Ton panier est vide</b>Ajoute des produits depuis la boutique.</div>`}
+  </div>${S.panier.length ? `<div class="actions"><a class="btn wa" id="envoyer-commande" href="#" target="_blank" rel="noopener">${ICONE_WA}Envoyer ma commande · <span class="num">${F(totalPanier())}</span></a></div>` : ""}</div>`;
+  document.body.style.overflow = "hidden";
+  majBarrePanier();
+  const maj = () => {
+    const f = { nom: ($("#c-nom") || {}).value || "", lieu: ($("#c-lieu") || {}).value || "", note: ($("#c-note") || {}).value || "" };
+    const b = $("#envoyer-commande"); if (b) b.href = lienWa(texteCommandePanier({ nom: f.nom.trim(), lieu: f.lieu.trim(), note: f.note.trim() }));
+    stocker.ecrire(cleClient, { nom: f.nom, lieu: f.lieu });
+  };
+  z.querySelectorAll("input,textarea").forEach(i => i.addEventListener("input", maj));
+  maj();
+}
+function fermerPanier() { $("#zone-panier").innerHTML = ""; if (!S.ouvert) document.body.style.overflow = ""; majBarrePanier(); }
+
+/* ---------- Chargement ---------- */
+function afficherErreur(titre, texte, reessayer) {
+  $("#titre").innerHTML = "Boutique<span class=\"sous\"> </span>";
+  $("#app").innerHTML = `<div class="erreur"><b style="font-size:18px">${esc(titre)}</b><p class="note">${texte}</p>${reessayer ? `<button class="btn pri" data-recharger>Réessayer</button>` : ""}</div>`;
+}
+function squelette() {
+  $("#app").innerHTML = `<div class="grille">${Array.from({ length: 6 }, () => `<div class="carte squelette"><div class="ph"></div><div class="info"><div class="l" style="width:80%"></div><div class="l" style="width:45%"></div></div></div>`).join("")}</div>`;
+}
+function montrer() {
+  rendreEntete(); rendreListe(); rafraichirPanier();
+  const r = lireRoute();
+  if (r.article) ouvrirFiche(r.article);
+}
+async function choisirBoutique() {
+  /* Lien sans nom de boutique : s'il n'y en a qu'une, on l'ouvre */
+  const liste = (await lireListe("vitrines", "mask.fieldPaths=nom&mask.fieldPaths=couleur")).filter(Boolean);
+  if (liste.length === 1) { history.replaceState(null, "", "#" + liste[0]._id); return liste[0]._id; }
+  if (!liste.length) return "";
+  $("#app").innerHTML = `<div class="vide"><b>Choisis une boutique</b></div><div class="grille">${liste.map(b => `<a class="carte" href="#${esc(b._id)}"><div class="ph"><div class="initiales">${esc(initiales(b.nom))}</div></div><div class="info"><div class="nom">${esc(b.nom || b._id)}</div></div></a>`).join("")}</div>`;
+  return null;
+}
+async function charger() {
+  if (!CFG || !CFG.projectId) { afficherErreur("Boutique pas encore configurée", "Le propriétaire doit publier le fichier de configuration de sa boutique."); return; }
+  let r = lireRoute();
+  S.nom = r.nom;
+  if (!S.nom) {
+    squelette();
+    try { const n = await choisirBoutique(); if (n === null) return; if (!n) { afficherErreur("Boutique introuvable", "Vérifie le lien qu'on t'a envoyé."); return; } S.nom = n; }
+    catch { afficherErreur("Impossible de charger la boutique", "Vérifie ta connexion internet.", true); return; }
+  }
+  S.panier = stocker.lire(clePanier()) || [];
+  const cache = stocker.lire(cleCache());
+  if (cache && cache.boutique) { S.boutique = cache.boutique; S.articles = cache.articles || []; montrer(); }
+  else squelette();
+  try {
+    const [b, articles] = await Promise.all([lire("vitrines/" + S.nom, "mask.fieldPaths=nom&mask.fieldPaths=whatsapp&mask.fieldPaths=accueil&mask.fieldPaths=couleur&mask.fieldPaths=categories&mask.fieldPaths=maj&mask.fieldPaths=nb"), lireListe("vitrines/" + S.nom + "/articles")]);
+    if (!b) { stocker.ecrire(cleCache(), null); afficherErreur("Boutique introuvable", "Cette boutique n'existe pas ou n'est plus en ligne. Vérifie le lien qu'on t'a envoyé."); return; }
+    S.boutique = versObjet(b);
+    S.articles = articles.filter(Boolean).sort((x, y) => (+x.ordre || 0) - (+y.ordre || 0));
+    if (!stocker.ecrire(cleCache(), { boutique: S.boutique, articles: S.articles, t: Date.now() }))
+      stocker.ecrire(cleCache(), { boutique: S.boutique, articles: S.articles.map(a => Object.assign({}, a, { vignette: "" })), t: Date.now() });
+    const ouvert = S.ouvert; montrer(); if (ouvert && !lireRoute().article) fermerFiche(true);
+  } catch (e) {
+    if (!cache) afficherErreur("Impossible de charger la boutique", "Vérifie ta connexion internet, puis réessaie.", true);
+    else toast("Hors connexion : produits de ta dernière visite");
+  }
+}
+
+/* ---------- Événements ---------- */
+document.addEventListener("input", e => { if (e.target.id === "recherche") { S.q = e.target.value; rendreListe(); } });
+document.addEventListener("click", e => {
+  const t = e.target;
+  const cat = t.closest("[data-cat]"); if (cat) { S.cat = cat.dataset.cat; rendreListe(); return; }
+  const carte = t.closest("[data-article]"); if (carte) { e.preventDefault(); S.qte = 1; S.pousse = true; history.pushState(null, "", "#" + S.nom + "/" + carte.dataset.article); ouvrirFiche(carte.dataset.article); return; }
+  if (t.closest("[data-fermer]")) { fermerFiche(); return; }
+  const a = S.ouvert ? S.articles.find(x => x.id === S.ouvert) : null;
+  const vb = t.closest("[data-variante]"); if (vb && a) { S.choix[a.id] = +vb.dataset.variante; S.qte = 1; const y = $("#couche-fiche").scrollTop; ouvrirFiche(a.id); $("#couche-fiche").scrollTop = y; return; }
+  const qb = t.closest("[data-qte]"); if (qb && a) { S.qte = Math.max(1, Math.min(99, (S.qte || 1) + +qb.dataset.qte)); $("#qte").textContent = S.qte; majLienCommande(a); return; }
+  if (t.closest("[data-ajouter]") && a) { ajouterAuPanier(a); fermerFiche(); return; }
+  if (t.closest("[data-partager]") && a) {
+    const url = urlArticle(a), texte = `${a.nom} — ${prixTexte(a)} chez ${S.boutique.nom}`;
+    if (navigator.share) navigator.share({ title: a.nom, text: texte, url }).catch(() => {});
+    else navigator.clipboard.writeText(url).then(() => toast("Lien copié"), () => toast(url));
+    return;
+  }
+  if (t.closest("#barre-panier")) { ouvrirPanier(); return; }
+  if (t.closest("[data-fermer-panier]")) { fermerPanier(); return; }
+  const lq = t.closest("[data-lqte]");
+  if (lq) { const l = S.panier[+lq.dataset.lqte]; if (l) { l.qte += +lq.dataset.d; if (l.qte < 1) S.panier.splice(+lq.dataset.lqte, 1); sauverPanier(); ouvrirPanier(); } return; }
+  if (t.closest("[data-vider]")) { S.panier = []; sauverPanier(); ouvrirPanier(); return; }
+  if (t.closest("#envoyer-commande")) { setTimeout(() => { toast("Envoie le message dans WhatsApp pour confirmer ta commande"); }, 300); return; }
+  if (t.closest("[data-recharger]")) { charger(); return; }
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if ($("#couche-panier")) fermerPanier(); else if (S.ouvert) fermerFiche();
+});
+window.addEventListener("hashchange", () => {
+  const r = lireRoute();
+  if (r.nom && r.nom !== S.nom) { S.ouvert = null; $("#zone-fiche").innerHTML = ""; document.body.style.overflow = ""; charger(); return; }
+  if (r.article && S.boutique) { if (S.ouvert !== r.article) { S.qte = 1; ouvrirFiche(r.article); } }
+  else if (S.ouvert) { S.ouvert = null; S.qte = 1; S.pousse = false; $("#zone-fiche").innerHTML = ""; document.body.style.overflow = ""; }
+});
+charger();
+</script>
+</body>
+</html>

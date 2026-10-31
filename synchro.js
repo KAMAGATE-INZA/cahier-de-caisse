@@ -296,7 +296,7 @@ function renderVendeurStock(vd) {
   let h = `<div class="chip"><div class="label">Pièces en ta possession</div><div class="v num">${total}</div><div class="note">${esc(resumeRegle(vd))}</div></div>`;
   for (const p of prods) {
     const r = Math.max(0, (+p.quantite || 0) - (vendus[p.id] || 0)), pv = +p.prixVente || 0, du = reverse(vd, p, pv);
-    h += `<div class="row"><div class="avec-vignette">${PHOTOS[p.id] ? `<img class="vignette" src="${PHOTOS[p.id]}" alt="">` : ""}<div style="min-width:0">
+    h += `<div class="row"><div class="avec-vignette">${PHOTOS[p.id] ? `<img class="vignette" src="${vignette(p.id)}" alt="" loading="lazy">` : ""}<div style="min-width:0">
       <div class="t">${esc(nomComplet(p))}</div>
       <div class="m num">Prix conseillé ${pv ? F(pv) : "?"}${pv ? " · tu reverses " + F(du) + ", tu gardes " + F(pv - du) : ""}${p.coutVisible ? " · prix d'achat " + F(p.cout) : ""}</div></div></div>
       <div class="amt num">${plur(r, "pièce")}</div></div>`;

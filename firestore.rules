@@ -78,5 +78,23 @@ service cloud.firestore {
           && request.resource.data.montant is number && request.resource.data.montant > 0;
       }
     }
+
+    // Boutique en ligne : page publique lisible par tous (prix, photos, descriptions).
+    // Seul le propriétaire de la vitrine la modifie. Rien de privé n'y est jamais écrit.
+    match /vitrines/{nom} {
+      function estProprietaire() {
+        return connecte() && exists(/databases/$(database)/documents/comptes/$(moi()))
+          && get(/databases/$(database)/documents/comptes/$(moi())).data.role == "proprio";
+      }
+      allow read: if true;
+      allow create: if estProprietaire() && request.resource.data.proprio == moi();
+      allow update: if connecte() && resource.data.proprio == moi() && request.resource.data.proprio == moi();
+      allow delete: if connecte() && resource.data.proprio == moi();
+      match /{col}/{id} {
+        allow read: if col in ["articles", "images"];
+        allow write: if col in ["articles", "images"] && connecte()
+          && get(/databases/$(database)/documents/vitrines/$(nom)).data.proprio == moi();
+      }
+    }
   }
 }

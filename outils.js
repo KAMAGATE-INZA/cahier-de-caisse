@@ -5,7 +5,9 @@
    ===================================================================== */
 
 /* ================= Photos (stockées sur l'appareil, IndexedDB) ================= */
-const PHOTOS = {};
+const PHOTOS = {};   /* photo principale de chaque produit (data URL) */
+const AUTRES = {};   /* photos supplémentaires du produit */
+const MAX_PHOTOS = 4;
 let _idb = null;
 function idbPhotos() {
   if (!_idb) _idb = new Promise((res, rej) => {
@@ -29,7 +31,13 @@ async function chargerPhotos() {
     const d = await idbPhotos();
     await new Promise(res => {
       const rq = d.transaction("photos").objectStore("photos").openCursor();
-      rq.onsuccess = () => { const c = rq.result; if (c) { PHOTOS[c.key] = c.value; c.continue(); } else res(); };
+      rq.onsuccess = () => {
+        const c = rq.result;
+        if (!c) return res();
+        if (String(c.key).startsWith("g:")) { if (Array.isArray(c.value)) AUTRES[String(c.key).slice(2)] = c.value; }
+        else PHOTOS[c.key] = c.value;
+        c.continue();
+      };
       rq.onerror = () => res();
     });
   } catch {}
@@ -50,12 +58,37 @@ function compresserImage(fichier, max = 720, qualite = 0.8) {
     img.src = url;
   });
 }
-async function definirPhoto(id, dataUrl, depuisServeur) {
-  if (dataUrl) PHOTOS[id] = dataUrl; else delete PHOTOS[id];
-  try { await idbEcrire(id, dataUrl || null); } catch {}
-  if (!depuisServeur && db.cloud && db.cloud.photo) db.cloud.photo(id, dataUrl || null);
+/* Toutes les photos d'un produit, la principale en premier */
+const photosDe = id => [PHOTOS[id], ...(AUTRES[id] || [])].filter(Boolean);
+async function definirPhotos(id, liste, depuisServeur) {
+  liste = (liste || []).filter(x => typeof x === "string" && x.startsWith("data:image/")).slice(0, MAX_PHOTOS);
+  for (const ancienne of photosDe(id)) if (!liste.includes(ancienne)) oublierUrl(ancienne);
+  if (liste[0]) PHOTOS[id] = liste[0]; else delete PHOTOS[id];
+  if (liste.length > 1) AUTRES[id] = liste.slice(1); else delete AUTRES[id];
+  try { await idbEcrire(id, liste[0] || null); await idbEcrire("g:" + id, liste.length > 1 ? liste.slice(1) : null); } catch {}
+  if (!depuisServeur && db.cloud && db.cloud.photo) db.cloud.photo(id, liste);
+  if (!depuisServeur && typeof planifierVitrine === "function") planifierVitrine();
 }
-async function enregistrerPhoto(id, fichier) { await definirPhoto(id, await compresserImage(fichier)); }
+async function definirPhoto(id, dataUrl, depuisServeur) { return definirPhotos(id, dataUrl ? [dataUrl, ...(AUTRES[id] || [])] : [], depuisServeur); }
+async function enregistrerPhoto(id, fichier) { await definirPhotos(id, [await compresserImage(fichier), ...(AUTRES[id] || [])]); }
+
+/* Fluidité : une photo est convertie une seule fois en adresse courte (blob:) pour l'affichage */
+const _urls = new Map();
+function urlPhoto(dataUrl) {
+  if (!dataUrl) return "";
+  let u = _urls.get(dataUrl);
+  if (!u) {
+    try {
+      const [tete, b64] = dataUrl.split(","), bin = atob(b64), octets = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) octets[i] = bin.charCodeAt(i);
+      u = URL.createObjectURL(new Blob([octets], { type: (tete.match(/data:([^;]+)/) || [])[1] || "image/jpeg" }));
+    } catch { u = dataUrl; }
+    _urls.set(dataUrl, u);
+  }
+  return u;
+}
+function oublierUrl(dataUrl) { const u = _urls.get(dataUrl); if (u && u.startsWith("blob:")) URL.revokeObjectURL(u); _urls.delete(dataUrl); }
+const vignette = id => PHOTOS[id] ? urlPhoto(PHOTOS[id]) : "";
 
 /* ================= Dessin sur canvas (catalogue et bilan) ================= */
 function chargerImage(src) { return new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; }); }
@@ -93,73 +126,6 @@ function apercuImages(titre, blobs, nomBase, explication) {
     <div class="btns"><button class="btn sec" data-close>Fermer</button><button class="btn pri" id="btn-partager-img">${blobs.length > 1 ? "Partager les " + blobs.length + " images" : "Partager l'image"}</button></div>
   </div>`);
   $("#btn-partager-img").addEventListener("click", () => partagerImages(blobs, nomBase, titre));
-}
-
-/* ---------- Catalogue à partager (format statut WhatsApp 1080×1920) ---------- */
-function catalogueSheet() {
-  const cats = [...new Set(S.data.produits.map(p => p.categorie || "Divers"))].sort();
-  const form = openSheet(`<form><h2>Catalogue à partager</h2>
-    <p class="note">L'appli crée des images au format statut WhatsApp, avec tes photos et tes prix. 6 produits par image.</p>
-    <div class="field"><label for="k-cat">Quels produits ?</label><select id="k-cat" name="cat">${opt("__tout", "Tout le catalogue", true)}${cats.map(c => opt(c, c, false)).join("")}</select></div>
-    <label class="check"><input name="prix" type="checkbox" checked> Afficher les prix</label>
-    <label class="check"><input name="dispo" type="checkbox" checked> Seulement les produits disponibles</label>
-    <div class="field"><label for="k-titre">Titre (facultatif)</label><input id="k-titre" name="titre" type="text" placeholder="Ex. Nouvel arrivage"></div>
-    <div class="err"></div>
-    <div class="btns"><button type="button" class="btn sec" data-close>Annuler</button><button type="submit" class="btn pri">Créer les images</button></div>
-  </form>`);
-  form.addEventListener("submit", async e => {
-    e.preventDefault();
-    const fd = new FormData(form), st = stats("tout");
-    const items = S.data.produits.filter(p => (fd.get("cat") === "__tout" || (p.categorie || "Divers") === fd.get("cat")) &&
-      (fd.get("dispo") !== "on" || p.mode === "numerique" || st.byProd[p.id].restant > 0))
-      .sort((a, b) => (a.categorie || "").localeCompare(b.categorie || "") || nomComplet(a).localeCompare(nomComplet(b)));
-    if (!items.length) { form.querySelector(".err").textContent = "Aucun produit à montrer avec ces choix."; return; }
-    form.querySelector(".pri").disabled = true; form.querySelector(".pri").textContent = "Création…";
-    const titre = (fd.get("titre") || "").trim() || (fd.get("cat") === "__tout" ? "Catalogue" : fd.get("cat"));
-    const blobs = await dessinerCatalogue(items, titre, fd.get("prix") === "on");
-    apercuImages("Ton catalogue", blobs, "catalogue", "Partage-les en statut WhatsApp ou dans tes groupes. Les produits sans photo ont une vignette avec leurs initiales.");
-  });
-}
-async function dessinerCatalogue(items, titre, avecPrix) {
-  const W = 1080, H = 1920, r = S.data.reglages, pages = [];
-  for (let i = 0; i < items.length; i += 6) pages.push(items.slice(i, i + 6));
-  const blobs = [];
-  for (let pi = 0; pi < pages.length; pi++) {
-    const c = document.createElement("canvas"); c.width = W; c.height = H;
-    const x = c.getContext("2d");
-    x.fillStyle = "#f3f5f1"; x.fillRect(0, 0, W, H);
-    x.fillStyle = "#0d6b57"; x.fillRect(0, 0, W, 250);
-    x.fillStyle = "#ffffff"; x.font = `600 34px ${POLICE}`; x.fillText(r.boutique || "Ma boutique", 64, 92);
-    x.font = `800 72px ${POLICE}`; x.fillText(texteLignes(x, titre, W - 128, 1)[0], 64, 186);
-    const gx = 48, gy = 290, cw = (W - gx * 2 - 32) / 2, ch = 470;
-    for (let k = 0; k < pages[pi].length; k++) {
-      const p = pages[pi][k], col = k % 2, row = Math.floor(k / 2);
-      const cx = gx + col * (cw + 32), cy = gy + row * (ch + 28);
-      x.save(); rrect(x, cx, cy, cw, ch, 28); x.fillStyle = "#ffffff"; x.fill(); x.clip();
-      const ph = 300, img = PHOTOS[p.id] ? await chargerImage(PHOTOS[p.id]) : null;
-      if (img) {
-        const k2 = Math.max(cw / img.width, ph / img.height), w2 = img.width * k2, h2 = img.height * k2;
-        x.save(); x.beginPath(); x.rect(cx, cy, cw, ph); x.clip();
-        x.drawImage(img, cx + (cw - w2) / 2, cy + (ph - h2) / 2, w2, h2);
-        x.restore();
-      } else {
-        x.fillStyle = "#dcefe8"; x.fillRect(cx, cy, cw, ph);
-        x.fillStyle = "#0d6b57"; x.font = `800 110px ${POLICE}`; x.textAlign = "center";
-        x.fillText(p.nom.split(/\s+/).map(m => m[0]).join("").slice(0, 2).toUpperCase(), cx + cw / 2, cy + ph / 2 + 38); x.textAlign = "left";
-      }
-      x.restore();
-      x.fillStyle = "#15211d"; x.font = `700 34px ${POLICE}`;
-      texteLignes(x, p.nom, cw - 48, 1).forEach((l, j) => x.fillText(l, cx + 24, cy + ph + 50 + j * 40));
-      if (p.variante) { x.fillStyle = "#5d6b66"; x.font = `500 26px ${POLICE}`; x.fillText(texteLignes(x, p.variante, cw - 48, 1)[0], cx + 24, cy + ph + 88); }
-      if (avecPrix && +p.prixVente) { x.fillStyle = "#0d6b57"; x.font = `800 42px ${POLICE}`; x.fillText(F(p.prixVente), cx + 24, cy + ch - 26); }
-    }
-    x.fillStyle = "#15211d"; x.fillRect(0, H - 170, W, 170);
-    x.fillStyle = "#ffffff"; x.font = `700 40px ${POLICE}`;
-    x.fillText(r.numero ? "Commande sur WhatsApp : " + r.numero : "Commande sur WhatsApp", 64, H - 92);
-    x.font = `500 28px ${POLICE}`; x.globalAlpha = .75; x.fillText(pages.length > 1 ? `Page ${pi + 1} / ${pages.length}` : "Paiement Mobile Money accepté", 64, H - 46); x.globalAlpha = 1;
-    blobs.push(await canvasVersBlob(c));
-  }
-  return blobs;
 }
 
 /* ---------- Bilan du mois en image ---------- */
@@ -312,12 +278,12 @@ function arrivageForm() {
       for (const l of calc.lignes) {
         if (l.ref === "__nouveau") {
           const id = nouvelId();
-          ops.push({ type: "ajout", col: "produits", id, data: { id, categorie: l.cat || "Divers", nom: l.nom, variante: l.variante, mode: "stock", quantite: l.qte, cout: l.cr, prixVente: +l.pv || 0, seuil: 2, vendeurVoitCout: false, commission: 0, plateforme: "moi" } });
+          ops.push({ type: "ajout", col: "produits", id, data: { id, categorie: l.cat || "Divers", nom: l.nom, variante: l.variante, mode: "stock", quantite: l.qte, cout: l.cr, prixVente: +l.pv || 0, seuil: 2, vendeurVoitCout: false, commission: 0, plateforme: "moi", cree: Date.now() } });
           lignesSauvees.push({ produitId: id, nom: l.nom + (l.variante ? " — " + l.variante : ""), qte: l.qte, prixAchat: l.prixF, coutRevient: l.cr });
         } else {
           const p = produitDe(l.ref), restant = st.byProd[p.id].restant;
           const moyen = Math.round((restant * (+p.cout || 0) + l.qte * l.cr) / (restant + l.qte));
-          ops.push({ type: "modif", col: "produits", id: p.id, data: { quantite: (+p.quantite || 0) + l.qte, cout: moyen } });
+          ops.push({ type: "modif", col: "produits", id: p.id, data: { quantite: (+p.quantite || 0) + l.qte, cout: moyen, reappro: Date.now() } });
           lignesSauvees.push({ produitId: p.id, nom: nomComplet(p), qte: l.qte, prixAchat: l.prixF, coutRevient: l.cr });
         }
       }
@@ -475,6 +441,5 @@ ACTIONS["liv-echec"] = id => {
 /* ================= Actions des nouveaux boutons ================= */
 ACTIONS["arrivage"] = () => arrivageForm();
 ACTIONS["arrivage-detail"] = id => arrivageDetail(id);
-ACTIONS["catalogue"] = () => catalogueSheet();
 ACTIONS["bilan-image"] = () => bilanImage();
 ACTIONS["pin"] = () => pinSheet();

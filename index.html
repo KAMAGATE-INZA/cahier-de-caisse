@@ -128,6 +128,8 @@ button.chip{width:100%}
 .row .amt .m{font-weight:400}
 .row .acts{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .row.compact{cursor:pointer}
+/* Fluidité : le navigateur ne dessine pas les lignes hors de l'écran */
+#v-ventes>.row,#v-depenses>.row,.cat>.row,.groupe>.row{content-visibility:auto;contain-intrinsic-size:auto 76px}
 .row.compact:not(.open) .acts{display:none}
 .row.compact.open{border-color:var(--accent)}
 .mini{border:1px solid var(--line);background:transparent;border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;text-decoration:none;display:inline-block}
@@ -182,6 +184,20 @@ button.chip{width:100%}
 .photo-pick img{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
 .vignette{width:44px;height:44px;object-fit:cover;border-radius:8px;flex:none}
 .row .avec-vignette{display:flex;gap:10px;align-items:center;min-width:0}
+.galerie-edit{display:flex;gap:10px;flex-wrap:wrap}
+.g-photo{position:relative;width:82px;height:82px}
+.g-photo img{width:82px;height:82px;object-fit:cover;border-radius:12px;border:2px solid var(--line);cursor:pointer;display:block}
+.g-photo.principale img{border-color:var(--accent)}
+.g-tag{position:absolute;left:4px;bottom:4px;background:var(--accent);color:var(--accent-ink);font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px}
+.g-x{position:absolute;top:-8px;right:-8px;width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--surface);font-size:13px;line-height:1;padding:0}
+.g-plus{width:82px;height:82px;border-radius:12px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);font-weight:600;font-size:13px}
+.nuancier{display:flex;gap:12px;flex-wrap:wrap}
+.nuancier label{display:grid;justify-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer}
+.nuancier input{position:absolute;opacity:0;pointer-events:none}
+.nuancier span{width:38px;height:38px;border-radius:50%;border:3px solid var(--surface);box-shadow:0 0 0 1px var(--line)}
+.nuancier input:checked+span{box-shadow:0 0 0 3px var(--ink)}
+.nuancier input:focus-visible+span{outline:2px solid var(--accent);outline-offset:3px}
+.field textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:11px 12px;font:inherit;font-size:16px;resize:vertical}
 .apercus{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
 .apercus img{width:100%;border-radius:10px;border:1px solid var(--line)}
 .outils{display:flex;gap:8px;flex-wrap:wrap}
@@ -200,6 +216,11 @@ textarea{color:inherit}
 .v-oubli{border:0;background:none;color:var(--muted);text-decoration:underline;font-size:14px}
 @media (prefers-reduced-motion:no-preference){.v-points.faux{animation:secoue .3s}@keyframes secoue{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .22s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.5}}}
+.row.client{cursor:pointer}
+.row.client:hover{border-color:var(--accent)}
+.card.dodo{border-left:4px solid var(--gold)}
+.card.dodo .row,.inner>.row{margin-top:8px}
+#v-ventes>.row.client{content-visibility:visible}
 </style>
 </head>
 <body>
@@ -232,6 +253,9 @@ textarea{color:inherit}
 <script src="vues.js"></script>
 <script src="formulaires.js"></script>
 <script src="outils.js"></script>
+<script src="catalogue.js"></script>
+<script src="suivi.js"></script>
+<script src="vitrine.js"></script>
 <script src="config.js"></script>
 <script src="synchro.js"></script>
 <script src="main.js"></script>
