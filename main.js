@@ -85,5 +85,11 @@ chargerPhotos().then(() => { if (Object.keys(PHOTOS).length) render(); });
 
 /* Hors connexion : le service worker garde l'appli en mémoire après la première ouverture */
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  /* Quand une nouvelle version vient de s'installer, on recharge une fois pour l'afficher tout de suite */
+  const avaitUneVersion = !!navigator.serviceWorker.controller;
+  let recharge = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (avaitUneVersion && !recharge && $("#sheet").hidden) { recharge = true; location.reload(); }
+  });
+  navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => {});
 }

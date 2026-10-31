@@ -415,7 +415,7 @@ function renderVendeurs() {
         <button class="mini" data-act="releve" data-id="${vd.id}">Relevé</button>
         ${numeroWa(vd.tel) ? `<a class="mini" href="${lienWa(vd.tel, msg)}" target="_blank" rel="noopener">Faire le point sur WhatsApp</a>` : ""}
         <button class="mini" data-act="edit-vendeur" data-id="${vd.id}">Modifier</button>
-        <button class="mini" data-act="apercu" data-id="${vd.id}">Voir son espace</button>
+        <button class="mini" data-act="apercu" data-id="${vd.id}">Aperçu de son espace</button>
       </div>${htmlAccesVendeur(vd)}</div>`;
   }
   h += `<button class="btn sec" data-act="nouveau-vendeur">Ajouter un vendeur</button>`;

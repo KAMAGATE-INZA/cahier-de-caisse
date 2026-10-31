@@ -44,6 +44,7 @@ function messageErreur(e) {
   return "Erreur : " + (e && e.message ? e.message : code || "inconnue");
 }
 C.messageErreur = messageErreur;
+C.configActuelle = () => (lireCfg() || {}).firebase || null;
 
 /* ================= Démarrage ================= */
 export function demarrer() {
@@ -67,6 +68,13 @@ async function ouvrirSession(u) {
   let compte = null, horsLigne = false;
   try { const s = await fb.getDoc(fb.doc(fs, "comptes", u.uid)); if (s.exists()) compte = s.data(); }
   catch { horsLigne = true; if (cfg.session && cfg.session.uid === u.uid) compte = cfg.session; }
+  const compteVendeurTechnique = String(u.email || "").endsWith("@" + DOMAINE_VENDEUR);
+  if (!compte && compteVendeurTechnique) {
+    /* Identifiant de vendeur dont l'accès a été retiré : il ne devient surtout pas propriétaire d'une boutique */
+    C.role = "retire"; C.etat = "retire"; prevenir();
+    if (typeof window.surAccesRetire === "function") window.surAccesRetire();
+    return;
+  }
   if (compte && compte.role === "vendeur") {
     C.role = "vendeur"; C.boutique = compte.boutique; C.vendeurId = compte.vendeurId;
   } else {
@@ -257,6 +265,13 @@ function abonnerVendeur() {
   const u = C.user.uid;
   S.role = "vendeur";
   S.data = donneesInitiales();
+  const refus = e => {
+    if (String((e && e.code) || "").includes("permission-denied")) {
+      desabos.forEach(f => { try { f(); } catch {} }); desabos = [];
+      S.data = donneesInitiales(); db.cloud = null; C.etat = "retire"; prevenir();
+      if (typeof window.surAccesRetire === "function") window.surAccesRetire();
+    } else { C.erreur = messageErreur(e); prevenir(); }
+  };
   const maj = () => { clearTimeout(maj.t); maj.t = setTimeout(render, 60); };
   desabos.push(fb.onSnapshot(fb.doc(fs, chemin("vendeurs") + "/" + C.vendeurId), s => {
     if (s.exists()) {
@@ -265,12 +280,12 @@ function abonnerVendeur() {
       if (vd.boutique) S.data.reglages = Object.assign({}, S.data.reglages, { boutique: vd.boutique.nom || "", numero: vd.boutique.numero || "" });
     } else S.data.vendeurs = [];
     maj();
-  }, e => { C.erreur = messageErreur(e); prevenir(); }));
+  }, refus));
   const ecouter = (col, transformer) => desabos.push(fb.onSnapshot(fb.query(fb.collection(fs, chemin(col)), fb.where("vendeurUid", "==", u)), snap => {
     S.data[col] = snap.docs.map(d => transformer({ ...d.data(), id: d.id }));
     if (col === "produits") chargerPhotosVendeur();
     maj();
-  }, e => { C.erreur = messageErreur(e); prevenir(); }));
+  }, refus));
   /* le vendeur ne reçoit jamais le vrai coût : seulement la base du partage */
   ecouter("produits", p => ({ ...p, cout: +p.base || 0, baseVendeur: +p.base || 0, coutVisible: !!p.vendeurVoitCout }));
   ecouter("ventes", v => v);
@@ -316,23 +331,33 @@ C.changerMdp = async (ancien, nouveau) => {
 C.email = () => auth && auth.currentUser ? auth.currentUser.email : "";
 
 /* Crée le compte du vendeur sans déconnecter le propriétaire (seconde instance temporaire) */
-C.creerAccesVendeur = async (vd, identifiant, mdp) => {
-  const cfg = lireCfg();
-  const app2 = fb.initializeApp(cfg.firebase, "creation-" + Date.now());
-  let vuid;
-  try {
-    const auth2 = fb.initializeAuth(app2, { persistence: fb.inMemoryPersistence });
-    const cred = await fb.createUserWithEmailAndPassword(auth2, C.emailDe(identifiant), mdp);
-    vuid = cred.user.uid;
-    await fb.signOut(auth2);
-  } finally { try { await fb.deleteApp(app2); } catch {} }
-  const id = slug(identifiant);
+/* Crée l'identifiant du vendeur. Si l'identifiant existe déjà (accès retiré puis redonné), on le reprend :
+   soit on connaît déjà son compte, soit on vérifie avec le mot de passe qu'il utilise. */
+C.creerAccesVendeur = async (vd, identifiant, mdp, mdpExistant) => {
+  const cfg = lireCfg(), id = slug(identifiant);
+  let vuid = null;
+  if (vd.ancienUid && vd.identifiant === id) vuid = vd.ancienUid;
+  if (!vuid) {
+    const app2 = fb.initializeApp(cfg.firebase, "creation-" + Date.now());
+    try {
+      const auth2 = fb.initializeAuth(app2, { persistence: fb.inMemoryPersistence });
+      try {
+        const cred = mdpExistant ? await fb.signInWithEmailAndPassword(auth2, C.emailDe(id), mdpExistant)
+                                 : await fb.createUserWithEmailAndPassword(auth2, C.emailDe(id), mdp);
+        vuid = cred.user.uid;
+      } catch (e) {
+        if (!mdpExistant && String(e.code || "").includes("email-already-in-use")) { const x = new Error("identifiant existant"); x.code = "identifiant-existant"; throw x; }
+        throw e;
+      }
+      await fb.signOut(auth2);
+    } finally { try { await fb.deleteApp(app2); } catch {} }
+  }
   await envoyer([
     { chemin: "comptes/" + vuid, data: { role: "vendeur", boutique: C.boutique, vendeurId: vd.id } },
     { chemin: `boutiques/${C.boutique}/membres/${vuid}`, data: { vendeurId: vd.id, identifiant: id } }
   ]);
   /* Le vendeur reçoit son identifiant, puis on marque toute sa partie à son nom */
-  const ops = [{ type: "modif", col: "vendeurs", id: vd.id, data: { uid: vuid, identifiant: id } }];
+  const ops = [{ type: "modif", col: "vendeurs", id: vd.id, data: { uid: vuid, identifiant: id, ancienUid: undefined } }];
   for (const col of ["produits", "ventes", "versements"]) for (const o of S.data[col]) if (o.vendeurId === vd.id) ops.push({ type: "modif", col, id: o.id, data: {} });
   db.appliquer(ops);
   return id;
@@ -340,13 +365,15 @@ C.creerAccesVendeur = async (vd, identifiant, mdp) => {
 C.retirerAccesVendeur = async (vd) => {
   if (!vd.uid) return;
   await envoyer([{ chemin: "comptes/" + vd.uid, suppr: true }, { chemin: `boutiques/${C.boutique}/membres/${vd.uid}`, suppr: true }]);
-  const ops = [{ type: "modif", col: "vendeurs", id: vd.id, data: { uid: undefined } }];
+  /* On garde la trace de son compte : redonner l'accès plus tard ne demandera rien de plus */
+  const ops = [{ type: "modif", col: "vendeurs", id: vd.id, data: { uid: undefined, ancienUid: vd.uid } }];
   for (const col of ["produits", "ventes", "versements"]) for (const o of S.data[col]) if (o.vendeurId === vd.id) ops.push({ type: "modif", col, id: o.id, data: {} });
   db.appliquer(ops);
 };
 /* Lien à envoyer au vendeur : il contient la configuration (non secrète) et son identifiant */
 C.lienAcces = identifiant => {
   const cfg = lireCfg();
+  if (window.CONFIG_FIREBASE && cfg && window.CONFIG_FIREBASE.projectId === cfg.firebase.projectId) return location.origin + location.pathname + "#" + slug(identifiant);
   const charge = btoa(unescape(encodeURIComponent(JSON.stringify({ f: cfg.firebase, i: identifiant })))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return location.origin + location.pathname + "#acces=" + charge;
 };

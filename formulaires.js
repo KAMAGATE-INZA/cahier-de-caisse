@@ -471,6 +471,7 @@ function reglagesSheet() {
     <button class="btn sec" data-act="csv">Exporter pour Excel / Google Sheets</button>
     <p class="hint">Restaurer sert aussi à copier tes données sur un autre appareil. L'export Excel ne sert qu'à analyser tes chiffres : il ne peut pas être restauré.</p>
     <button class="btn sec" data-close>Fermer</button>
+    <p class="hint" style="text-align:center">Cahier de Caisse · version ${VERSION_APPLI}</p>
   </div>`);
   $("#f-reglages").addEventListener("submit", e => {
     e.preventDefault();

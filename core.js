@@ -3,6 +3,7 @@
 const KEY = "cahier-de-caisse:v1";
 const PREFS = "cahier-de-caisse:prefs";
 const FORMAT = 3;
+const VERSION_APPLI = "12"; /* affichée dans Réglages : permet de vérifier que la mise à jour est arrivée */
 const nouvelId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 function donneesInitiales() {

@@ -46,6 +46,18 @@ window.surSession = role => {
   const r = document.getElementById("reglages-synchro"); if (r) r.innerHTML = htmlSynchro();
 };
 window.surDeconnexion = () => { majEtatSynchro(); };
+/* L'accès de ce vendeur a été retiré : on n'affiche plus rien */
+window.surAccesRetire = () => {
+  S.data = donneesInitiales(); render();
+  if (document.getElementById("acces-retire")) return;
+  const c = document.getElementById("connexion"); if (c) c.remove();
+  const el = document.createElement("div"); el.id = "connexion"; el.setAttribute("role", "dialog");
+  el.innerHTML = `<div class="v-in" style="max-width:340px;display:grid;gap:14px;text-align:center" id="acces-retire">
+    <h2>Accès retiré</h2><p>Le propriétaire a retiré ton accès à cet espace. Si c'est une erreur, contacte-le.</p>
+    <button class="btn pri" id="ar-ok">Fermer</button></div>`;
+  document.body.appendChild(el);
+  $("#ar-ok").addEventListener("click", async () => { try { await Cloud.deconnecter(); } catch {} localStorage.removeItem(CLOUD_KEY); location.reload(); });
+};
 
 /* Premier branchement sur un appareil qui a déjà des données */
 window.choisirDonnees = ({ ventesLocales, ventesEnLigne }) => new Promise(res => {
@@ -114,13 +126,15 @@ function htmlSynchro() {
       <div class="note">${esc($("#etat-synchro") ? $("#etat-synchro").textContent : "")}</div></div>
     <button class="btn sec" data-act="copier-regles">Copier les règles de sécurité</button>
     <p class="hint">À coller dans Firebase : Firestore Database → Règles → Publier. Sans elles, la synchro est refusée.</p>
+    ${actif && !(window.CONFIG_FIREBASE && Cloud.configActuelle() && window.CONFIG_FIREBASE.projectId === Cloud.configActuelle().projectId) ? `<button class="btn sec" data-act="liens-courts">Liens courts pour tes vendeurs</button>
+    <p class="hint">Pour que le lien de ton vendeur soit simplement « …/cahier-de-caisse/#kouame ».</p>` : ""}
     ${actif ? `<button class="btn sec" data-act="deconnecter">Se déconnecter</button>` : ""}
     <button class="btn sec" data-act="desactiver-synchro">Arrêter la synchro sur cet appareil</button>`;
 }
 ACTIONS["activer-synchro"] = () => {
   const form = openSheet(`<form><h2>Activer la synchronisation</h2>
     <p class="note">Colle ici le bloc <b>firebaseConfig</b> que Firebase t'a donné (Paramètres du projet → Vos applications). Il n'est pas secret : ce sont les règles de sécurité qui protègent tes données.</p>
-    <div class="field"><label for="sy-cfg">Configuration Firebase</label><textarea id="sy-cfg" name="cfg" rows="8" style="width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px;font:13px ui-monospace,monospace" placeholder='const firebaseConfig = {&#10;  apiKey: "…",&#10;  authDomain: "…",&#10;  projectId: "…",&#10;  appId: "…"&#10;};' required></textarea></div>
+    <div class="field"><label for="sy-cfg">Configuration Firebase</label><textarea id="sy-cfg" name="cfg" rows="8" style="width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px;font:13px ui-monospace,monospace" placeholder='const firebaseConfig = {&#10;  apiKey: "…",&#10;  authDomain: "…",&#10;  projectId: "…",&#10;  appId: "…"&#10;};' required>${window.CONFIG_FIREBASE ? esc(JSON.stringify(window.CONFIG_FIREBASE, null, 2)) : ""}</textarea></div>
     <p class="hint">Fais-le d'abord sur l'appareil qui contient déjà tes données : elles seront envoyées en ligne. Une copie reste sur l'appareil.</p>
     ${buttons}</form>`, fd => {
       const f = lireConfigFirebase(fd.get("cfg"));
@@ -128,6 +142,17 @@ ACTIONS["activer-synchro"] = () => {
       localStorage.setItem(CLOUD_KEY, JSON.stringify({ firebase: f, creation: true }));
       setTimeout(() => location.reload(), 50);
     });
+};
+/* Liens courts : la configuration (non secrète) est publiée avec l'appli dans config.js */
+ACTIONS["liens-courts"] = async () => {
+  const c = Cloud.configActuelle(); if (!c) return;
+  const contenu = `/* Configuration Firebase de la boutique. Elle n'est pas secrète : les règles de sécurité protègent les données.\n   Grâce à ce fichier, le lien d'un vendeur peut être court : …/cahier-de-caisse/#identifiant */\nwindow.CONFIG_FIREBASE = ${JSON.stringify(c, null, 2)};\n`;
+  openSheet(`<div class="inner"><h2>Liens courts pour tes vendeurs</h2>
+    <p>Télécharge le fichier <b>config.js</b>, puis envoie-le sur GitHub avec les autres fichiers de l'appli : il remplace celui qui s'y trouve.</p>
+    <p class="note">Ensuite, le lien de ton vendeur sera simplement : <b>${esc(location.origin + location.pathname)}#kouame</b>. Les anciens liens longs continuent de marcher.</p>
+    <button class="btn pri" id="lc-dl">Télécharger config.js</button>
+    <button class="btn sec" data-close>Fermer</button></div>`);
+  $("#lc-dl").addEventListener("click", () => partagerFichier("config.js", contenu, "text/javascript", "config.js"));
 };
 ACTIONS["copier-regles"] = async () => {
   try {
@@ -148,15 +173,30 @@ function htmlAccesVendeur(vd) {
   if (!cfgCloud() || S.role === "vendeur") return "";
   if (!cloudActif()) return `<div class="note">Connecte la synchro pour donner l'accès à ${esc(vd.nom)}.</div>`;
   return vd.uid
-    ? `<div class="note">Accès à l'appli : identifiant <b>${esc(vd.identifiant || "")}</b> · <button class="mini" data-act="lien-vendeur" data-id="${vd.id}">Renvoyer le lien</button> <button class="mini danger" data-act="retirer-acces" data-id="${vd.id}">Retirer l'accès</button></div>`
-    : `<button class="mini" data-act="acces-vendeur" data-id="${vd.id}">Donner l'accès à l'appli</button>`;
+    ? `<div class="box"><div><span class="tag">Accès actif</span> identifiant <b>${esc(vd.identifiant || "")}</b></div>
+        <div class="btns" style="flex-wrap:wrap"><button class="mini" data-act="lien-vendeur" data-id="${vd.id}">Renvoyer le lien</button><button class="mini danger" data-act="retirer-acces" data-id="${vd.id}">Retirer l'accès</button></div></div>`
+    : `<div class="box"><div><span class="tag gold">Pas d'accès</span> ${vd.ancienUid ? "Son accès a été retiré : il ne voit plus rien." : esc(vd.nom) + " n'a pas encore l'appli."}</div>
+        <div><button class="mini wa" data-act="acces-vendeur" data-id="${vd.id}">${vd.ancienUid ? "Lui redonner l'accès" : "Donner l'accès à l'appli"}</button></div></div>`;
 }
 const motDePasseAuHasard = () => { const c = "abcdefghjkmnpqrstuvwxyz23456789"; return Array.from(crypto.getRandomValues(new Uint32Array(8)), n => c[n % c.length]).join(""); };
 function messageAcces(vd, identifiant, mdp) {
-  return `Bonjour ${vd.nom}, voici ton accès à notre Cahier de Caisse pour noter tes ventes :\n\n${Cloud.lienAcces(identifiant)}\n\nIdentifiant : ${identifiant}${mdp ? "\nMot de passe : " + mdp + "\n\nChange ton mot de passe après ta première connexion (onglet « Mon compte »)." : ""}\n\nOuvre le lien, connecte-toi, puis ajoute l'appli à ton écran d'accueil.`;
+  return `Bonjour ${vd.nom}, voici ton accès à notre Cahier de Caisse pour noter tes ventes :\n\n${Cloud.lienAcces(identifiant)}\n\nIdentifiant : ${identifiant}${mdp ? "\nMot de passe : " + mdp + "\n\nChange ton mot de passe après ta première connexion (onglet « Mon compte »)." : "\nMot de passe : celui que tu utilises déjà."}\n\nOuvre le lien, connecte-toi, puis ajoute l'appli à ton écran d'accueil.`;
 }
 ACTIONS["acces-vendeur"] = id => {
   const vd = vendeurDe(id); if (!vd) return;
+  /* Accès retiré puis redonné : on reprend son identifiant et son mot de passe actuels, rien à saisir */
+  if (vd.ancienUid && vd.identifiant) {
+    openSheet(`<div class="inner"><h2>Redonner l'accès à ${esc(vd.nom)}</h2>
+      <p>Il retrouvera son espace avec son identifiant <b>${esc(vd.identifiant)}</b> et le mot de passe qu'il utilisait.</p>
+      <div class="err"></div>
+      <div class="btns"><button class="btn sec" data-close>Annuler</button><button class="btn pri" id="ra-ok">Redonner l'accès</button></div></div>`);
+    $("#ra-ok").addEventListener("click", async () => {
+      $("#ra-ok").disabled = true;
+      try { const ident = await Cloud.creerAccesVendeur(vd, vd.identifiant, ""); montrerLienVendeur(vendeurDe(id) || vd, ident, ""); }
+      catch (x) { $(".sheet .err").textContent = Cloud.messageErreur(x); $("#ra-ok").disabled = false; }
+    });
+    return;
+  }
   const mdp = motDePasseAuHasard();
   const form = openSheet(`<form><h2>Accès pour ${esc(vd.nom)}</h2>
     <p class="note">${esc(vd.nom)} verra seulement les produits que tu lui confies, ses ventes et ce qu'il te doit. Il ne voit ni tes autres produits, ni tes dépenses, ni ton bénéfice. Le prix d'achat n'apparaît que pour les produits où tu as coché « Le vendeur peut voir mon prix d'achat ».</p>
@@ -164,7 +204,11 @@ ACTIONS["acces-vendeur"] = id => {
       <div class="field"><label for="ac-id">Identifiant</label><input id="ac-id" name="identifiant" type="text" autocapitalize="none" value="${esc(Cloud.slug(vd.nom))}" required></div>
       <div class="field"><label for="ac-mdp">Mot de passe provisoire</label><input id="ac-mdp" name="mdp" type="text" value="${mdp}" minlength="6" required></div>
     </div>
-    <p class="hint">Il pourra changer son mot de passe ensuite. L'identifiant ne peut pas être réutilisé après un retrait d'accès.</p>
+    <p class="hint">Il pourra changer son mot de passe ensuite.</p>
+    <div class="box" id="ac-exist" hidden>
+      <div>L'identifiant <b id="ac-exist-id"></b> existe déjà : c'est sans doute son ancien accès. Pour le reprendre, entre le mot de passe que tu lui avais envoyé (il est dans votre conversation WhatsApp). Sinon, choisis un autre identifiant.</div>
+      <div class="field"><label for="ac-ancien">Mot de passe qu'il utilise</label><input id="ac-ancien" name="ancien" type="text" autocomplete="off"></div>
+    </div>
     <div class="err"></div>
     <div class="btns"><button type="button" class="btn sec" data-close>Annuler</button><button type="submit" class="btn pri">Créer l'accès</button></div>
   </form>`);
@@ -172,11 +216,19 @@ ACTIONS["acces-vendeur"] = id => {
     e.preventDefault();
     const err = form.querySelector(".err"), bt = form.querySelector(".pri");
     bt.disabled = true; bt.textContent = "Création…";
+    const reprise = !$("#ac-exist").hidden && form.ancien.value.trim();
     try {
-      const ident = await Cloud.creerAccesVendeur(vd, form.identifiant.value, form.mdp.value);
-      montrerLienVendeur(vendeurDe(id) || vd, ident, form.mdp.value);
-    } catch (x) { err.textContent = Cloud.messageErreur(x); bt.disabled = false; bt.textContent = "Créer l'accès"; }
+      const ident = await Cloud.creerAccesVendeur(vd, form.identifiant.value, form.mdp.value, reprise ? form.ancien.value.trim() : "");
+      montrerLienVendeur(vendeurDe(id) || vd, ident, reprise ? form.ancien.value.trim() : form.mdp.value);
+    } catch (x) {
+      if (x.code === "identifiant-existant") {
+        $("#ac-exist").hidden = false; $("#ac-exist-id").textContent = Cloud.slug(form.identifiant.value);
+        err.textContent = ""; bt.textContent = "Reprendre cet identifiant";
+      } else { err.textContent = Cloud.messageErreur(x); bt.textContent = $("#ac-exist").hidden ? "Créer l'accès" : "Reprendre cet identifiant"; }
+      bt.disabled = false;
+    }
   });
+  form.identifiant.addEventListener("input", () => { $("#ac-exist").hidden = true; form.querySelector(".pri").textContent = "Créer l'accès"; });
 };
 function montrerLienVendeur(vd, identifiant, mdp) {
   const msg = messageAcces(vd, identifiant, mdp);
@@ -269,7 +321,8 @@ function renderVendeurCompte(vd) {
   h += `<div class="label">Mon compte</div>
     <div class="box"><div>Identifiant : <b>${esc(vd.identifiant || "")}</b></div>${S.data.reglages.boutique ? `<div class="note">Boutique : ${esc(S.data.reglages.boutique)}${S.data.reglages.numero ? " · " + esc(S.data.reglages.numero) : ""}</div>` : ""}</div>
     <button class="btn sec" data-act="v-mdp">Changer mon mot de passe</button>
-    <button class="btn sec" data-act="deconnecter">Se déconnecter</button>`;
+    <button class="btn sec" data-act="deconnecter">Se déconnecter</button>
+    <p class="hint" style="text-align:center">Cahier de Caisse · version ${VERSION_APPLI}</p>`;
   $("#v-vendeurs").innerHTML = h;
 }
 function venteVendeurForm(v) {
@@ -387,9 +440,11 @@ function lienVendeurSurAppareilProprio(o, avecSynchro) {
 (function () {
   /* Lien d'accès envoyé à un vendeur : #acces=… */
   const m = location.hash.match(/^#acces=([\w-]+)/);
-  if (m) {
+  const court = !m && window.CONFIG_FIREBASE && location.hash.match(/^#([a-z0-9][a-z0-9-]{0,40})$/);
+  if (m || court) {
     let o = null;
-    try { o = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, "+").replace(/_/g, "/"))))); } catch {}
+    if (court) o = { f: window.CONFIG_FIREBASE, i: court[1] };
+    else try { o = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, "+").replace(/_/g, "/"))))); } catch {}
     history.replaceState(null, "", location.pathname + location.search);
     if (o && o.f && o.f.apiKey) {
       const avant = cfgCloud();
