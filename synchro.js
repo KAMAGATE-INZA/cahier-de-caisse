@@ -53,9 +53,15 @@ window.surAccesRetire = () => {
   const c = document.getElementById("connexion"); if (c) c.remove();
   const el = document.createElement("div"); el.id = "connexion"; el.setAttribute("role", "dialog");
   el.innerHTML = `<div class="v-in" style="max-width:340px;display:grid;gap:14px;text-align:center" id="acces-retire">
-    <h2>Accès retiré</h2><p>Le propriétaire a retiré ton accès à cet espace. Si c'est une erreur, contacte-le.</p>
-    <button class="btn pri" id="ar-ok">Fermer</button></div>`;
+    <h2>Ton accès a changé</h2><p>Le propriétaire t'a peut-être donné un <b>nouveau mot de passe</b> : reconnecte-toi avec. Sinon, ton accès a été retiré : contacte-le.</p>
+    <button class="btn pri" id="ar-reco">Me reconnecter</button>
+    <button class="btn sec" id="ar-ok">Quitter cet espace</button></div>`;
   document.body.appendChild(el);
+  $("#ar-reco").addEventListener("click", async () => {
+    try { await Cloud.deconnecter(); } catch {}
+    const c = cfgCloud(); if (c) { delete c.session; localStorage.setItem(CLOUD_KEY, JSON.stringify(c)); }
+    location.reload();
+  });
   $("#ar-ok").addEventListener("click", async () => { try { await Cloud.deconnecter(); } catch {} localStorage.removeItem(CLOUD_KEY); location.reload(); });
 };
 
@@ -199,10 +205,21 @@ function htmlAccesVendeur(vd) {
   if (!cloudActif()) return `<div class="note">Connecte la synchro pour donner l'accès à ${esc(vd.nom)}.</div>`;
   return vd.uid
     ? `<div class="box"><div><span class="tag">Accès actif</span> identifiant <b>${esc(vd.identifiant || "")}</b></div>
-        <div class="btns" style="flex-wrap:wrap"><button class="mini" data-act="lien-vendeur" data-id="${vd.id}">Renvoyer le lien</button><button class="mini danger" data-act="retirer-acces" data-id="${vd.id}">Retirer l'accès</button></div></div>`
+        <div class="btns" style="flex-wrap:wrap"><button class="mini wa" data-act="lien-vendeur" data-id="${vd.id}">Renvoyer l'accès</button><button class="mini" data-act="nouveau-mdp" data-id="${vd.id}">Nouveau mot de passe</button><button class="mini danger" data-act="retirer-acces" data-id="${vd.id}">Retirer l'accès</button></div></div>`
     : `<div class="box"><div><span class="tag gold">Pas d'accès</span> ${vd.ancienUid ? "Son accès a été retiré : il ne voit plus rien." : esc(vd.nom) + " n'a pas encore l'appli."}</div>
         <div><button class="mini wa" data-act="acces-vendeur" data-id="${vd.id}">${vd.ancienUid ? "Lui redonner l'accès" : "Donner l'accès à l'appli"}</button></div></div>`;
 }
+/* Le dernier mot de passe envoyé à chaque vendeur, rangé dans tes réglages (lisibles par toi seul) :
+   si le message WhatsApp est perdu, « Renvoyer l'accès » le remet. */
+function memoriserAcces(vdId, identifiant, mdp) {
+  if (!mdp) return;
+  const acces = Object.assign({}, S.data.reglages.acces || {});
+  acces[vdId] = { identifiant, mdp, date: todayISO() };
+  S.data.reglages = Object.assign({}, S.data.reglages, { acces });
+  enregistrer();
+  if (db.cloud && db.cloud.reglages) db.cloud.reglages(S.data.reglages);
+}
+const accesMemorise = vd => { const a = (S.data.reglages.acces || {})[vd.id]; return a && a.identifiant === vd.identifiant ? a : null; };
 const motDePasseAuHasard = () => { const c = "abcdefghjkmnpqrstuvwxyz23456789"; return Array.from(crypto.getRandomValues(new Uint32Array(8)), n => c[n % c.length]).join(""); };
 function messageAcces(vd, identifiant, mdp) {
   return `Bonjour ${vd.nom}, voici ton accès à notre Cahier de Caisse pour noter tes ventes :\n\n${Cloud.lienAcces(identifiant)}\n\nIdentifiant : ${identifiant}${mdp ? "\nMot de passe : " + mdp + "\n\nChange ton mot de passe après ta première connexion (onglet « Mon compte »)." : "\nMot de passe : celui que tu utilises déjà."}\n\nOuvre le lien, connecte-toi, puis ajoute l'appli à ton écran d'accueil.`;
@@ -214,12 +231,14 @@ ACTIONS["acces-vendeur"] = id => {
     openSheet(`<div class="inner"><h2>Redonner l'accès à ${esc(vd.nom)}</h2>
       <p>Il retrouvera son espace avec son identifiant <b>${esc(vd.identifiant)}</b> et le mot de passe qu'il utilisait.</p>
       <div class="err"></div>
-      <div class="btns"><button class="btn sec" data-close>Annuler</button><button class="btn pri" id="ra-ok">Redonner l'accès</button></div></div>`);
+      <div class="btns"><button class="btn sec" data-close>Annuler</button><button class="btn pri" id="ra-ok">Redonner l'accès</button></div>
+      <button class="btn sec" id="ra-mdp">Il a oublié son mot de passe : lui en donner un nouveau</button></div>`);
     $("#ra-ok").addEventListener("click", async () => {
       $("#ra-ok").disabled = true;
-      try { const ident = await Cloud.creerAccesVendeur(vd, vd.identifiant, ""); montrerLienVendeur(vendeurDe(id) || vd, ident, ""); }
+      try { const ident = await Cloud.creerAccesVendeur(vd, vd.identifiant, ""); const m = accesMemorise(vendeurDe(id) || vd); montrerLienVendeur(vendeurDe(id) || vd, ident, m ? m.mdp : "", "Accès redonné", m ? m.date : ""); }
       catch (x) { $(".sheet .err").textContent = Cloud.messageErreur(x); $("#ra-ok").disabled = false; }
     });
+    $("#ra-mdp").addEventListener("click", () => nouveauMdpSheet(vd));
     return;
   }
   const mdp = motDePasseAuHasard();
@@ -233,6 +252,7 @@ ACTIONS["acces-vendeur"] = id => {
     <div class="box" id="ac-exist" hidden>
       <div>L'identifiant <b id="ac-exist-id"></b> existe déjà : c'est sans doute son ancien accès. Pour le reprendre, entre le mot de passe que tu lui avais envoyé (il est dans votre conversation WhatsApp). Sinon, choisis un autre identifiant.</div>
       <div class="field"><label for="ac-ancien">Mot de passe qu'il utilise</label><input id="ac-ancien" name="ancien" type="text" autocomplete="off"></div>
+      <button type="button" class="btn sec" id="ac-oubli">Je ne connais pas son mot de passe : garder cet identifiant avec le nouveau mot de passe</button>
     </div>
     <div class="err"></div>
     <div class="btns"><button type="button" class="btn sec" data-close>Annuler</button><button type="submit" class="btn pri">Créer l'accès</button></div>
@@ -244,7 +264,9 @@ ACTIONS["acces-vendeur"] = id => {
     const reprise = !$("#ac-exist").hidden && form.ancien.value.trim();
     try {
       const ident = await Cloud.creerAccesVendeur(vd, form.identifiant.value, form.mdp.value, reprise ? form.ancien.value.trim() : "");
-      montrerLienVendeur(vendeurDe(id) || vd, ident, reprise ? form.ancien.value.trim() : form.mdp.value);
+      const mdpEnvoye = reprise ? form.ancien.value.trim() : form.mdp.value;
+      memoriserAcces(vd.id, ident, mdpEnvoye);
+      montrerLienVendeur(vendeurDe(id) || vd, ident, mdpEnvoye);
     } catch (x) {
       if (x.code === "identifiant-existant") {
         $("#ac-exist").hidden = false; $("#ac-exist-id").textContent = Cloud.slug(form.identifiant.value);
@@ -254,18 +276,61 @@ ACTIONS["acces-vendeur"] = id => {
     }
   });
   form.identifiant.addEventListener("input", () => { $("#ac-exist").hidden = true; form.querySelector(".pri").textContent = "Créer l'accès"; });
+  $("#ac-oubli").addEventListener("click", async () => {
+    const b = $("#ac-oubli"), err = form.querySelector(".err");
+    if ((form.mdp.value || "").length < 6) { err.textContent = "Mot de passe provisoire : 6 caractères minimum."; return; }
+    b.disabled = true; b.textContent = "Création…";
+    try { const ident = await Cloud.nouveauMotDePasse(vd, form.mdp.value, form.identifiant.value); memoriserAcces(vd.id, ident, form.mdp.value); montrerLienVendeur(vendeurDe(id) || vd, ident, form.mdp.value, "Nouvel accès créé"); }
+    catch (x) { err.textContent = x.code === "regles" || x.code === "pris" ? x.message : Cloud.messageErreur(x); b.disabled = false; b.textContent = "Réessayer avec le nouveau mot de passe"; }
+  });
 };
-function montrerLienVendeur(vd, identifiant, mdp) {
+/* Nouveau mot de passe : quand il l'a oublié, ou que le message d'accès a été supprimé */
+function nouveauMdpSheet(vd) {
+  const mdp = motDePasseAuHasard();
+  const form = openSheet(`<form><h2>Nouveau mot de passe pour ${esc(vd.nom)}</h2>
+    <p>Son identifiant <b>${esc(vd.identifiant || Cloud.slug(vd.nom))}</b> et son lien ne changent pas. Ses ventes, son stock et ce qu'il te doit restent en place.</p>
+    <p class="note">Son ancien mot de passe ne marchera plus : s'il est connecté sur son téléphone, l'appli lui demandera de se reconnecter avec le nouveau.</p>
+    <div class="field"><label for="nm-mdp">Nouveau mot de passe</label><input id="nm-mdp" name="mdp" type="text" value="${mdp}" minlength="6" required autocomplete="off"></div>
+    <div class="err"></div>
+    <div class="btns"><button type="button" class="btn sec" data-close>Annuler</button><button type="submit" class="btn pri">Créer le nouveau mot de passe</button></div>
+  </form>`);
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    const err = form.querySelector(".err"), bt = form.querySelector(".pri");
+    bt.disabled = true; bt.textContent = "Création…"; err.textContent = "";
+    try {
+      const ident = await Cloud.nouveauMotDePasse(vd, form.mdp.value);
+      memoriserAcces(vd.id, ident, form.mdp.value);
+      montrerLienVendeur(vendeurDe(vd.id) || vd, ident, form.mdp.value, "Nouveau mot de passe créé");
+    } catch (x) { err.textContent = x.code === "regles" || x.code === "pris" ? x.message : Cloud.messageErreur(x); bt.disabled = false; bt.textContent = "Créer le nouveau mot de passe"; }
+  });
+}
+ACTIONS["nouveau-mdp"] = id => { const vd = vendeurDe(id); if (vd) nouveauMdpSheet(vd); };
+function montrerLienVendeur(vd, identifiant, mdp, titre, dateMdp) {
   const msg = messageAcces(vd, identifiant, mdp);
-  openSheet(`<div class="inner"><h2>Accès créé</h2>
+  openSheet(`<div class="inner"><h2>${esc(titre || "Accès créé")}</h2>
     <p>Envoie ce message à ${esc(vd.nom)} :</p>
+    ${dateMdp ? `<p class="note">Mot de passe envoyé le ${esc(dateCourte(dateMdp))}. S'il l'a changé depuis et ne s'en souvient plus, utilise « Nouveau mot de passe ».</p>` : ""}
     <div class="box" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px">${esc(msg)}</div>
     <a class="btn pri" style="text-align:center;text-decoration:none" href="${lienWa(vd.tel, msg)}" target="_blank" rel="noopener">Envoyer sur WhatsApp</a>
     <button class="btn sec" id="cp-acces">Copier le message</button>
     <button class="btn sec" data-close>Fermer</button></div>`);
   $("#cp-acces").addEventListener("click", () => navigator.clipboard.writeText(msg).then(() => toast("Message copié"), () => toast("Copie impossible")));
 }
-ACTIONS["lien-vendeur"] = id => { const vd = vendeurDe(id); if (vd) montrerLienVendeur(vd, vd.identifiant || "", ""); };
+ACTIONS["lien-vendeur"] = id => {
+  const vd = vendeurDe(id); if (!vd) return;
+  const m = accesMemorise(vd);
+  if (m) { montrerLienVendeur(vd, vd.identifiant || "", m.mdp, "Accès de " + vd.nom, m.date); return; }
+  /* mot de passe inconnu (accès créé avant cette version) : on propose d'en donner un nouveau */
+  openSheet(`<div class="inner"><h2>Accès de ${esc(vd.nom)}</h2>
+    <p>Identifiant : <b>${esc(vd.identifiant || "")}</b></p>
+    <p class="note">L'appli ne connaît pas le mot de passe que tu lui avais envoyé (accès créé avant la version 16). S'il ne l'a plus, donne-lui un nouveau mot de passe : son identifiant, son lien, ses ventes et son stock ne changent pas.</p>
+    <button class="btn pri" id="lv-mdp">Lui donner un nouveau mot de passe</button>
+    <button class="btn sec" id="lv-lien">Renvoyer seulement le lien</button>
+    <button class="btn sec" data-close>Fermer</button></div>`);
+  $("#lv-mdp").addEventListener("click", () => nouveauMdpSheet(vd));
+  $("#lv-lien").addEventListener("click", () => montrerLienVendeur(vd, vd.identifiant || "", "", "Accès de " + vd.nom));
+};
 ACTIONS["retirer-acces"] = async (id, b) => {
   if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Confirmer le retrait"; return; }
   try { await Cloud.retirerAccesVendeur(vendeurDe(id)); toast("Accès retiré"); } catch (x) { toast(Cloud.messageErreur(x)); }

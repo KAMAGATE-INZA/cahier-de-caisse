@@ -411,7 +411,7 @@ C.retirerVitrine = async nom => {
 /* Pourquoi le serveur refuse ? « anciennes » : les règles publiées dans Firebase datent d'avant la boutique.
    « compte-repare » : la fiche de compte manquait, elle vient d'être recréée (on peut réessayer). */
 C.diagnostiquerRegles = async () => {
-  try { await fb.getDoc(fb.doc(fs, "vitrines", "verification-des-regles")); }
+  try { await fb.getDoc(fb.doc(fs, "vitrines", "verification-des-regles")); await fb.getDoc(fb.doc(fs, "identifiants", "verification-des-regles")); }
   catch (e) { return String((e && e.code) || "").includes("permission") ? "anciennes" : "reseau"; }
   if (C.role === "proprio" && C.user) {
     try {
@@ -427,7 +427,14 @@ C.nomVitrineLibre = async nom => {
 };
 
 /* ================= Comptes ================= */
-C.connecter = (identifiant, mdp) => fb.signInWithEmailAndPassword(auth, C.emailDe(identifiant), mdp);
+/* identifiants/{identifiant} : compte de connexion actuel d'un vendeur (il change quand tu lui donnes un nouveau mot de passe).
+   Lisible par tous : il ne contient qu'une adresse technique, jamais de mot de passe. */
+C.emailPour = async identifiant => {
+  if (String(identifiant).includes("@")) return String(identifiant).trim();
+  try { const s = await fb.getDoc(fb.doc(fs, "identifiants", slug(identifiant))); if (s.exists() && s.data().email) return s.data().email; } catch {}
+  return C.emailDe(identifiant);
+};
+C.connecter = async (identifiant, mdp) => fb.signInWithEmailAndPassword(auth, await C.emailPour(identifiant), mdp);
 C.creerCompte = (email, mdp) => fb.createUserWithEmailAndPassword(auth, email.trim(), mdp);
 C.motDePasseOublie = email => fb.sendPasswordResetEmail(auth, email.trim());
 C.deconnecter = () => fb.signOut(auth);
@@ -450,7 +457,7 @@ C.creerAccesVendeur = async (vd, identifiant, mdp, mdpExistant) => {
     try {
       const auth2 = fb.initializeAuth(app2, { persistence: fb.inMemoryPersistence });
       try {
-        const cred = mdpExistant ? await fb.signInWithEmailAndPassword(auth2, C.emailDe(id), mdpExistant)
+        const cred = mdpExistant ? await fb.signInWithEmailAndPassword(auth2, await C.emailPour(id), mdpExistant)
                                  : await fb.createUserWithEmailAndPassword(auth2, C.emailDe(id), mdp);
         vuid = cred.user.uid;
       } catch (e) {
@@ -464,8 +471,45 @@ C.creerAccesVendeur = async (vd, identifiant, mdp, mdpExistant) => {
     { chemin: "comptes/" + vuid, data: { role: "vendeur", boutique: C.boutique, vendeurId: vd.id } },
     { chemin: `boutiques/${C.boutique}/membres/${vuid}`, data: { vendeurId: vd.id, identifiant: id } }
   ]);
+  /* l'identifiant est réservé à ta boutique (sans effet si les règles n'ont pas encore la version 15) */
+  if (!(vd.ancienUid && vd.identifiant === id && vd.versionAcces)) fb.getDoc(fb.doc(fs, "identifiants", id)).then(s => { if (!s.exists()) return fb.setDoc(fb.doc(fs, "identifiants", id), { email: C.emailDe(id), boutique: C.boutique, vendeurId: vd.id }); }).catch(() => {});
   /* Le vendeur reçoit son identifiant, puis on marque toute sa partie à son nom */
   const ops = [{ type: "modif", col: "vendeurs", id: vd.id, data: { uid: vuid, identifiant: id, ancienUid: undefined } }];
+  for (const col of ["produits", "ventes", "versements"]) for (const o of S.data[col]) if (o.vendeurId === vd.id) ops.push({ type: "modif", col, id: o.id, data: {} });
+  db.appliquer(ops);
+  return id;
+};
+/* Nouveau mot de passe pour un vendeur qui l'a perdu : un nouveau compte de connexion sous le même identifiant.
+   Son lien, son identifiant, ses ventes et son stock ne changent pas ; l'ancien mot de passe ne marche plus. */
+C.nouveauMotDePasse = async (vd, mdp, identifiant) => {
+  const cfg = lireCfg(), id = slug(identifiant || vd.identifiant || vd.nom);
+  const ref = fb.doc(fs, "identifiants", id);
+  let fiche;
+  try { fiche = await fb.getDoc(ref); }
+  catch (e) { if (String((e && e.code) || "").includes("permission")) { const x = new Error("Les règles de sécurité dans Firebase doivent être mises à jour (version " + (typeof VERSION_REGLES !== "undefined" ? VERSION_REGLES : 15) + ") : Réglages → Synchronisation → Copier les règles."); x.code = "regles"; throw x; } throw e; }
+  if (fiche.exists() && fiche.data().boutique !== C.boutique) { const x = new Error("Cet identifiant appartient à une autre boutique. Choisis-en un autre."); x.code = "pris"; throw x; }
+  let n = Math.max(2, (+vd.versionAcces || 1) + 1), vuid = null, email = "";
+  const app2 = fb.initializeApp(cfg.firebase, "mdp-" + Date.now());
+  try {
+    const auth2 = fb.initializeAuth(app2, { persistence: fb.inMemoryPersistence });
+    for (let essai = 0; essai < 10 && !vuid; essai++, n++) {
+      email = id + "." + n + "@" + DOMAINE_VENDEUR;
+      try { vuid = (await fb.createUserWithEmailAndPassword(auth2, email, mdp)).user.uid; }
+      catch (e) { if (!String(e.code || "").includes("email-already-in-use")) throw e; }
+    }
+    if (!vuid) throw new Error("Impossible de créer le nouvel accès. Réessaie.");
+    n--;
+    await fb.signOut(auth2);
+  } finally { try { await fb.deleteApp(app2); } catch {} }
+  await fb.setDoc(ref, { email, boutique: C.boutique, vendeurId: vd.id });
+  const actions = [
+    { chemin: "comptes/" + vuid, data: { role: "vendeur", boutique: C.boutique, vendeurId: vd.id } },
+    { chemin: `boutiques/${C.boutique}/membres/${vuid}`, data: { vendeurId: vd.id, identifiant: id } }
+  ];
+  /* l'ancien compte n'est retiré que s'il était encore actif (après un retrait d'accès, ses fiches n'existent plus) */
+  if (vd.uid && vd.uid !== vuid) actions.push({ chemin: "comptes/" + vd.uid, suppr: true }, { chemin: `boutiques/${C.boutique}/membres/${vd.uid}`, suppr: true });
+  await envoyerOuEchouer(actions, 8);
+  const ops = [{ type: "modif", col: "vendeurs", id: vd.id, data: { uid: vuid, identifiant: id, versionAcces: n, ancienUid: undefined } }];
   for (const col of ["produits", "ventes", "versements"]) for (const o of S.data[col]) if (o.vendeurId === vd.id) ops.push({ type: "modif", col, id: o.id, data: {} });
   db.appliquer(ops);
   return id;
