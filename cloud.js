@@ -152,7 +152,7 @@ function decouper(col, obj) {
     return [o, priv];
   }
   if (col === "versements") { o.vendeurUid = vendeurUidDe(o.vendeurId); return [o, null]; }
-  if (col === "vendeurs") { o.boutique = { nom: S.data.reglages.boutique || "", numero: S.data.reglages.numero || "" }; return [o, null]; }
+  if (col === "vendeurs") { o.boutique = { nom: S.data.reglages.boutique || "", numero: S.data.reglages.numero || "", logo: S.data.reglages.logo || "" }; return [o, null]; }
   return [o, null];
 }
 
@@ -291,7 +291,7 @@ function abonnerVendeur() {
     if (s.exists()) {
       const vd = { ...s.data(), id: s.id };
       S.data.vendeurs = [vd];
-      if (vd.boutique) S.data.reglages = Object.assign({}, S.data.reglages, { boutique: vd.boutique.nom || "", numero: vd.boutique.numero || "" });
+      if (vd.boutique) S.data.reglages = Object.assign({}, S.data.reglages, { boutique: vd.boutique.nom || "", numero: vd.boutique.numero || "", logo: vd.boutique.logo || "" });
     } else S.data.vendeurs = [];
     maj();
   }, refus));
@@ -391,9 +391,10 @@ C.publierVitrine = async ({ nom, ancien, racine, articles, images }) => {
   const doc = { ...racine, proprio: C.user.uid, index, signature, nb: articles.length, maj: Date.now() };
   /* la fiche de la vitrine d'abord : les règles vérifient le propriétaire avant d'accepter les articles */
   if (!snap.exists()) await fb.setDoc(ref, { ...doc, index: {}, signature: "" });
-  await envoyerOuEchouer(legers, 100);
-  await envoyerOuEchouer(lourds, 6);     /* une requête Firestore ne dépasse pas 10 Mo */
-  await envoyerOuEchouer(retraits, 400);
+  /* lots de 8 : chaque écriture fait vérifier le propriétaire par les règles, et Firebase limite ces vérifications par envoi */
+  await envoyerOuEchouer(legers, 8);
+  await envoyerOuEchouer(lourds, 5);     /* une requête Firestore ne dépasse pas 10 Mo */
+  await envoyerOuEchouer(retraits, 8);
   await fb.setDoc(ref, doc);             /* l'index en dernier : si l'envoi est coupé, la prochaine fois reprend */
   if (ancien && ancien !== nom) await C.retirerVitrine(ancien).catch(() => {});
   return { nb: articles.length, envoyes: legers.length + lourds.length, retires: retraits.length / 2 };
@@ -404,8 +405,21 @@ C.retirerVitrine = async nom => {
   if (!snap.exists() || snap.data().proprio !== C.user.uid) return;
   const actions = [];
   for (const id in (snap.data().index || {})) actions.push({ chemin: "vitrines/" + nom + "/articles/" + id, suppr: true }, { chemin: "vitrines/" + nom + "/images/" + id, suppr: true });
-  await envoyerOuEchouer(actions, 400);
+  await envoyerOuEchouer(actions, 8);
   await fb.deleteDoc(ref); /* en dernier : les règles lisent cette fiche pour autoriser les suppressions ci-dessus */
+};
+/* Pourquoi le serveur refuse ? « anciennes » : les règles publiées dans Firebase datent d'avant la boutique.
+   « compte-repare » : la fiche de compte manquait, elle vient d'être recréée (on peut réessayer). */
+C.diagnostiquerRegles = async () => {
+  try { await fb.getDoc(fb.doc(fs, "vitrines", "verification-des-regles")); }
+  catch (e) { return String((e && e.code) || "").includes("permission") ? "anciennes" : "reseau"; }
+  if (C.role === "proprio" && C.user) {
+    try {
+      const s = await fb.getDoc(fb.doc(fs, "comptes", C.user.uid));
+      if (!s.exists() || s.data().role !== "proprio") { await fb.setDoc(fb.doc(fs, "comptes", C.user.uid), { role: "proprio", boutique: C.user.uid }); return "compte-repare"; }
+    } catch {}
+  }
+  return "ok";
 };
 C.nomVitrineLibre = async nom => {
   const s = await fb.getDoc(fb.doc(fs, "vitrines", nom));

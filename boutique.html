@@ -34,16 +34,25 @@ a{color:inherit}
 .cache{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
 /* En-tête */
-.haut{position:sticky;top:0;z-index:20;background:var(--c);color:var(--c-ink);padding:max(10px,env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 0 rgba(0,0,0,.08)}
-.logo{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.18);display:grid;place-items:center;font:800 16px var(--display);flex:none}
+.haut{background:var(--c);color:var(--c-ink);padding:max(10px,env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 0 rgba(0,0,0,.08)}
+.logo{width:44px;height:44px;border-radius:14px;background:rgba(255,255,255,.18);display:grid;place-items:center;font:800 17px var(--display);flex:none;overflow:hidden;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.logo img{width:100%;height:100%;object-fit:cover}
+/* Bande tissée aux couleurs de la boutique (inspirée des pagnes tissés) : la signature visuelle de la page */
+.tissage{height:8px;background:
+  repeating-linear-gradient(90deg,transparent 0 22px,rgba(0,0,0,.28) 22px 25px,transparent 25px 30px),
+  repeating-linear-gradient(90deg,var(--c) 0 16px,#e0a22b 16px 22px,var(--c) 22px 30px,#1d2a24 30px 36px,#f3efe4 36px 40px,#e0a22b 40px 46px)}
+.haut-zone{position:sticky;top:0;z-index:20}
 .haut h1{font:800 19px/1.15 var(--display);margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .haut .sous{font-size:12.5px;opacity:.85;font-weight:500;display:block}
 .bt-wa-haut{display:inline-flex;align-items:center;gap:6px;background:#fff;color:#0b3d2b;border:0;border-radius:999px;padding:8px 13px;font-weight:700;font-size:14px;text-decoration:none;flex:none}
 .bt-wa-haut svg{width:18px;height:18px;fill:var(--wa)}
 
 main{max-width:1080px;margin:0 auto;padding:14px 16px 120px}
-.accueil{background:var(--c-doux);color:var(--ink);border-radius:16px;padding:12px 14px;font-size:15px;margin-bottom:12px}
-@media (prefers-color-scheme:dark){.accueil{background:var(--surface);border:1px solid var(--line)}}
+.accueil{font:600 17px/1.4 var(--display);color:var(--ink);margin:4px 2px 14px;text-wrap:pretty}
+.etapes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 14px;padding:0;list-style:none;counter-reset:e}
+.etapes li{counter-increment:e;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 10px 11px;font-size:12.5px;line-height:1.3;color:var(--muted)}
+.etapes li::before{content:counter(e);display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--c);color:var(--c-ink);font:800 13px var(--display);margin-bottom:6px}
+.etapes b{display:block;color:var(--ink);font-size:13.5px}
 .recherche{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:14px;padding:12px 14px 12px 40px;font:inherit;font-size:16px;outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23889590' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:13px 50%}
 .recherche:focus{border-color:var(--c);box-shadow:0 0 0 3px var(--c-doux)}
 .cats{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
@@ -59,7 +68,8 @@ main{max-width:1080px;margin:0 auto;padding:14px 16px 120px}
 .carte{background:var(--surface);border-radius:16px;overflow:hidden;box-shadow:var(--ombre);text-decoration:none;display:flex;flex-direction:column;border:1px solid var(--line);transition:transform .12s}
 .carte:active{transform:scale(.98)}
 .carte .ph{position:relative;aspect-ratio:1/1;background:var(--c-doux);overflow:hidden}
-.carte .ph img{width:100%;height:100%;object-fit:cover}
+.carte .ph img{width:100%;height:100%;object-fit:cover;transition:opacity .25s}
+.carte .ph img:not(.vu){opacity:0}
 .initiales{width:100%;height:100%;display:grid;place-items:center;font:800 34px var(--display);color:var(--c)}
 .badges{position:absolute;left:8px;top:8px;display:flex;flex-wrap:wrap;gap:5px;right:8px}
 .badge{background:var(--ink);color:#fff;font-size:11.5px;font-weight:800;padding:3px 8px;border-radius:999px;letter-spacing:.01em}
@@ -69,7 +79,11 @@ main{max-width:1080px;margin:0 auto;padding:14px 16px 120px}
 .carte.epuise .ph img,.carte.epuise .initiales{opacity:.45;filter:grayscale(.6)}
 .carte .info{padding:10px 11px 12px;display:flex;flex-direction:column;gap:3px;flex:1}
 .carte .nom{font-weight:700;font-size:14.5px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.carte .prix{font:800 16px var(--display);margin-top:auto;padding-top:4px}
+.carte .prix{font:800 16.5px var(--display);margin-top:auto;padding-top:4px;color:var(--c)}
+@media (prefers-color-scheme:dark){.carte .prix{color:var(--ink)}}
+.carte{position:relative}
+.ajout-rapide{position:absolute;right:8px;bottom:8px;width:38px;height:38px;border-radius:12px;border:0;background:var(--c);color:var(--c-ink);font:800 22px/1 var(--display);display:grid;place-items:center;box-shadow:0 3px 10px rgba(0,0,0,.18)}
+.carte .info{padding-right:52px}
 .carte .prix s{font:500 12.5px var(--body);color:var(--muted);margin-left:5px}
 .carte .var{font-size:12.5px;color:var(--muted)}
 
@@ -78,7 +92,12 @@ main{max-width:1080px;margin:0 auto;padding:14px 16px 120px}
 .squelette .ph{background:linear-gradient(90deg,var(--line),var(--surface),var(--line));background-size:200% 100%;animation:sk 1.2s infinite}
 .squelette .l{height:12px;border-radius:6px;background:var(--line);margin:4px 0}
 @keyframes sk{to{background-position:-200% 0}}
-.pied{text-align:center;color:var(--muted);font-size:12.5px;margin-top:28px}
+.pied{margin:34px -16px 0;background:var(--surface);border-top:1px solid var(--line);text-align:center;padding:0 16px 28px}
+.pied .tissage{margin:0 -16px 22px}
+.pied h3{font:800 20px var(--display);margin:0 0 4px}
+.pied p{color:var(--muted);font-size:14px;margin:0 0 14px}
+.pied .btn{max-width:360px;margin:0 auto}
+.pied small{display:block;color:var(--muted);font-size:12.5px;margin-top:14px}
 
 /* Boutons */
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:14px;padding:14px 16px;font-weight:800;font-size:16px;text-decoration:none}
@@ -155,11 +174,11 @@ main{max-width:1080px;margin:0 auto;padding:14px 16px 120px}
 </style>
 </head>
 <body>
-<header class="haut" id="haut">
+<div class="haut-zone"><header class="haut" id="haut">
   <div class="logo" id="logo" aria-hidden="true">·</div>
   <h1 id="titre">Boutique<span class="sous" id="sous-titre">Chargement…</span></h1>
   <a class="bt-wa-haut" id="wa-haut" href="#" target="_blank" rel="noopener" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.8 14.2c-.2.7-1.4 1.3-2 1.4-.5.1-1.2.1-1.9-.1a17 17 0 0 1-1.7-.6 13.4 13.4 0 0 1-5.1-4.5c-.6-.8-1.1-1.8-1.1-2.9s.6-1.6.8-1.9c.2-.2.5-.3.6-.3h.5c.1 0 .4 0 .6.4l.8 2c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.2.3.7 1.2 1.6 2a7.3 7.3 0 0 0 2.2 1.4c.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.1.1.7-.1 1.3Z"/></svg>WhatsApp</a>
-</header>
+</header><div class="tissage" aria-hidden="true"></div></div>
 <main id="app" aria-live="polite"></main>
 <div id="zone-fiche"></div>
 <div id="zone-panier"></div>
@@ -206,9 +225,14 @@ const champs = f => Object.fromEntries(Object.entries(f || {}).map(([k, v]) => [
 const versObjet = d => d ? Object.assign(champs(d.fields), { _id: d.name.split("/").pop() }) : null;
 async function lire(chemin, params) {
   const q = [CFG && CFG.apiKey ? "key=" + encodeURIComponent(CFG.apiKey) : "", params || ""].filter(Boolean).join("&");
-  const r = await fetch(BASE + chemin + (q ? "?" + q : ""), { cache: "no-store" });
+  let r;
+  try { r = await fetch(BASE + chemin + (q ? "?" + q : ""), { cache: "no-store" }); }
+  catch (e) { throw Object.assign(new Error("reseau"), { statut: 0 }); }
   if (r.status === 404) return null;
-  if (!r.ok) throw new Error("HTTP " + r.status);
+  if (!r.ok) {
+    let detail = ""; try { const j = await r.json(); detail = (j.error && (j.error.status || j.error.message)) || ""; } catch {}
+    throw Object.assign(new Error("HTTP " + r.status), { statut: r.status, detail: String(detail).slice(0, 80) });
+  }
   return r.json();
 }
 async function lireListe(chemin, params) {
@@ -264,7 +288,8 @@ function rendreListe() {
   if (!cats.includes(S.cat)) S.cat = "Tout";
   const q = norm(S.q).trim();
   const liste = S.articles.filter(a => (S.cat === "Tout" || a.categorie === S.cat) && (!q || norm([a.nom, a.categorie, a.description, ...variantes(a).map(v => v.nom)].join(" ")).includes(q)));
-  let h = b.accueil ? `<div class="accueil">${esc(b.accueil)}</div>` : "";
+  let h = b.accueil ? `<p class="accueil">${esc(b.accueil)}</p>` : "";
+  if (!q && S.cat === "Tout" && !S.panier.length) h += `<ol class="etapes"><li><b>Choisis</b>tes articles</li><li><b>Ajoute</b>au panier</li><li><b>Envoie</b>ta commande sur WhatsApp</li></ol>`;
   h += `<label class="cache" for="recherche">Chercher un produit</label><input class="recherche" id="recherche" type="search" placeholder="Chercher un produit…" value="${esc(S.q)}" autocomplete="off">`;
   if (cats.length > 2) h += `<div class="cats" role="group" aria-label="Catégories">${cats.map(c => `<button data-cat="${esc(c)}" aria-pressed="${c === S.cat}">${esc(c)}</button>`).join("")}</div>`;
   h += `<div class="compte num">${liste.length} article${liste.length > 1 ? "s" : ""}${q ? ` pour « ${esc(S.q)} »` : ""}</div>`;
@@ -273,21 +298,27 @@ function rendreListe() {
   h += `<div class="grille">${liste.map(a => `<a class="carte${a.epuise ? " epuise" : ""}" href="#${esc(S.nom)}/${esc(a.id)}" data-article="${esc(a.id)}">
       <div class="ph">${a.vignette ? `<img src="${a.vignette}" alt="${esc(a.nom)}" loading="lazy" decoding="async">` : `<div class="initiales">${esc(initiales(a.nom))}</div>`}<div class="badges">${badges(a)}</div></div>
       <div class="info"><div class="nom">${esc(a.nom)}</div>${variantes(a).length > 1 ? `<div class="var">${variantes(a).length} modèles</div>` : ""}
-      <div class="prix num">${prixTexte(a)}${a.prixMin === a.prixMax && variantes(a)[0].avant ? `<s>${F(variantes(a)[0].avant)}</s>` : ""}</div></div></a>`).join("")}</div>`;
-  if (b.maj) h += `<div class="pied">Mis à jour le ${new Date(b.maj).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} · Commande et paiement sur WhatsApp</div>`;
+      <div class="prix num">${prixTexte(a)}${a.prixMin === a.prixMax && variantes(a)[0].avant ? `<s>${F(variantes(a)[0].avant)}</s>` : ""}</div></div>
+      ${ajoutRapide(a) ? `<button class="ajout-rapide" data-rapide="${esc(a.id)}" aria-label="Ajouter ${esc(a.nom)} au panier">+</button>` : ""}</a>`).join("")}</div>`;
+  h += `<footer class="pied"><div class="tissage" aria-hidden="true"></div><h3>Une question sur un article ?</h3><p>Écris-nous : on te répond vite, et on peut t'envoyer d'autres photos.</p>
+    ${b.whatsapp ? `<a class="btn wa" href="${lienWa(`Bonjour ${b.nom} ! Je viens de ta boutique en ligne, j'ai une question.`)}" target="_blank" rel="noopener">${ICONE_WA}Écrire sur WhatsApp</a>` : ""}
+    ${b.maj ? `<small>Prix et disponibilités mis à jour le ${new Date(b.maj).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</small>` : ""}</footer>`;
   const focus = document.activeElement && document.activeElement.id === "recherche", pos = focus ? document.activeElement.selectionStart : 0;
   app.innerHTML = h;
+  app.querySelectorAll(".carte .ph img").forEach(i => { if (i.complete) i.classList.add("vu"); else i.addEventListener("load", () => i.classList.add("vu"), { once: true }); });
   if (focus) { const r = $("#recherche"); r.focus(); try { r.setSelectionRange(pos, pos); } catch {} }
 }
 function rendreEntete() {
   const b = S.boutique;
   document.title = b.nom + " · Boutique en ligne";
-  $("#logo").textContent = initiales(b.nom);
+  $("#logo").innerHTML = /^data:image\//.test(b.logo || "") ? `<img src="${b.logo}" alt="">` : esc(initiales(b.nom));
   $("#titre").innerHTML = esc(b.nom) + `<span class="sous">${S.articles.filter(a => !a.epuise).length} articles disponibles</span>`;
   const wa = $("#wa-haut");
   if (b.whatsapp) { wa.hidden = false; wa.href = lienWa(`Bonjour ${b.nom} ! Je viens de ta boutique en ligne, j'ai une question.`); } else wa.hidden = true;
   appliquerCouleur(b.couleur);
 }
+
+const ajoutRapide = a => !a.epuise && variantes(a).length === 1 && variantes(a)[0].dispo && !(a.numerique && a.lien);
 
 /* ---------- Fiche d'un produit ---------- */
 function choixDe(a) {
@@ -427,9 +458,18 @@ function ouvrirPanier() {
 function fermerPanier() { $("#zone-panier").innerHTML = ""; if (!S.ouvert) document.body.style.overflow = ""; majBarrePanier(); }
 
 /* ---------- Chargement ---------- */
-function afficherErreur(titre, texte, reessayer) {
+/* Dire la vraie raison d'un échec : refus du serveur, clé invalide ou absence de réseau */
+function erreurChargement(e) {
+  const code = e && e.statut ? "Code " + e.statut + (e.detail ? " · " + e.detail : "") : "";
+  if (e && (e.statut === 403 || e.statut === 401)) return afficherErreur("Boutique pas encore ouverte au public",
+    "La boutique existe, mais le serveur n'autorise pas encore sa lecture. Si c'est ta boutique : dans le Cahier de Caisse, ouvre Réglages → Synchronisation → « Copier les règles de sécurité », colle-les dans Firebase à la place des anciennes, puis publie.", true, code);
+  if (e && e.statut === 400) return afficherErreur("Adresse de boutique incorrecte", "Le lien semble incomplet. Demande le lien exact à la boutique.", true, code);
+  if (e && e.statut) return afficherErreur("Le serveur ne répond pas correctement", "Réessaie dans quelques minutes.", true, code);
+  return afficherErreur("Pas de connexion", "Vérifie ta connexion internet, puis réessaie.", true, "");
+}
+function afficherErreur(titre, texte, reessayer, code) {
   $("#titre").innerHTML = "Boutique<span class=\"sous\"> </span>";
-  $("#app").innerHTML = `<div class="erreur"><b style="font-size:18px">${esc(titre)}</b><p class="note">${texte}</p>${reessayer ? `<button class="btn pri" data-recharger>Réessayer</button>` : ""}</div>`;
+  $("#app").innerHTML = `<div class="erreur"><b style="font-size:18px">${esc(titre)}</b><p class="note">${esc(texte)}</p>${reessayer ? `<button class="btn pri" data-recharger>Réessayer</button>` : ""}${code ? `<p class="note" style="margin-top:12px;font-size:12px">${esc(code)}</p>` : ""}</div>`;
 }
 function squelette() {
   $("#app").innerHTML = `<div class="grille">${Array.from({ length: 6 }, () => `<div class="carte squelette"><div class="ph"></div><div class="info"><div class="l" style="width:80%"></div><div class="l" style="width:45%"></div></div></div>`).join("")}</div>`;
@@ -454,14 +494,14 @@ async function charger() {
   if (!S.nom) {
     squelette();
     try { const n = await choisirBoutique(); if (n === null) return; if (!n) { afficherErreur("Boutique introuvable", "Vérifie le lien qu'on t'a envoyé."); return; } S.nom = n; }
-    catch { afficherErreur("Impossible de charger la boutique", "Vérifie ta connexion internet.", true); return; }
+    catch (e) { erreurChargement(e); return; }
   }
   S.panier = stocker.lire(clePanier()) || [];
   const cache = stocker.lire(cleCache());
   if (cache && cache.boutique) { S.boutique = cache.boutique; S.articles = cache.articles || []; montrer(); }
   else squelette();
   try {
-    const [b, articles] = await Promise.all([lire("vitrines/" + S.nom, "mask.fieldPaths=nom&mask.fieldPaths=whatsapp&mask.fieldPaths=accueil&mask.fieldPaths=couleur&mask.fieldPaths=categories&mask.fieldPaths=maj&mask.fieldPaths=nb"), lireListe("vitrines/" + S.nom + "/articles")]);
+    const [b, articles] = await Promise.all([lire("vitrines/" + S.nom, "mask.fieldPaths=nom&mask.fieldPaths=logo&mask.fieldPaths=whatsapp&mask.fieldPaths=accueil&mask.fieldPaths=couleur&mask.fieldPaths=categories&mask.fieldPaths=maj&mask.fieldPaths=nb"), lireListe("vitrines/" + S.nom + "/articles")]);
     if (!b) { stocker.ecrire(cleCache(), null); afficherErreur("Boutique introuvable", "Cette boutique n'existe pas ou n'est plus en ligne. Vérifie le lien qu'on t'a envoyé."); return; }
     S.boutique = versObjet(b);
     S.articles = articles.filter(Boolean).sort((x, y) => (+x.ordre || 0) - (+y.ordre || 0));
@@ -469,7 +509,7 @@ async function charger() {
       stocker.ecrire(cleCache(), { boutique: S.boutique, articles: S.articles.map(a => Object.assign({}, a, { vignette: "" })), t: Date.now() });
     const ouvert = S.ouvert; montrer(); if (ouvert && !lireRoute().article) fermerFiche(true);
   } catch (e) {
-    if (!cache) afficherErreur("Impossible de charger la boutique", "Vérifie ta connexion internet, puis réessaie.", true);
+    if (!cache || (e && e.statut)) erreurChargement(e);
     else toast("Hors connexion : produits de ta dernière visite");
   }
 }
@@ -479,6 +519,8 @@ document.addEventListener("input", e => { if (e.target.id === "recherche") { S.q
 document.addEventListener("click", e => {
   const t = e.target;
   const cat = t.closest("[data-cat]"); if (cat) { S.cat = cat.dataset.cat; rendreListe(); return; }
+  const rapide = t.closest("[data-rapide]");
+  if (rapide) { e.preventDefault(); const a = S.articles.find(x => x.id === rapide.dataset.rapide); if (a) { S.qte = 1; ajouterAuPanier(a); rendreListe(); } return; }
   const carte = t.closest("[data-article]"); if (carte) { e.preventDefault(); S.qte = 1; S.pousse = true; history.pushState(null, "", "#" + S.nom + "/" + carte.dataset.article); ouvrirFiche(carte.dataset.article); return; }
   if (t.closest("[data-fermer]")) { fermerFiche(); return; }
   const a = S.ouvert ? S.articles.find(x => x.id === S.ouvert) : null;

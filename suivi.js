@@ -260,3 +260,93 @@ function promoSheet(p) {
   if (stop) stop.addEventListener("click", () => { db.modifier("produits", p.id, { prixVente: base, prixAvant: 0 }); closeSheet(); toast("Promo arrêtée"); });
 }
 ACTIONS["promo"] = id => promoSheet(produitDe(id));
+
+/* ---------- Commande reçue de la boutique en ligne ----------
+   Le client envoie un message WhatsApp déjà écrit par la boutique :
+     • 2 × Basket urbaine (Noire 41) — 20 000 F
+     Nom : Awa / Livraison à : Cocody / Remarque : …
+   Tu le colles ici : l'appli retrouve les produits et enregistre les ventes d'un coup. */
+function analyserCommande(texte) {
+  const res = { articles: [], nom: "", lieu: "", note: "" };
+  for (const brut of String(texte || "").split(/\r?\n/)) {
+    const l = brut.trim();
+    let m = l.match(/^[•*·-]?\s*(\d+)\s*[×xX]\s*(.+?)\s*[—–-]\s*([\d\s.  ]+)\s*F\b/);
+    if (m) {
+      let nom = m[2].trim(), variante = "";
+      const mv = nom.match(/^(.*\S)\s*\(([^()]*)\)$/); if (mv) { nom = mv[1].trim(); variante = mv[2].trim(); }
+      const qte = +m[1], total = +m[3].replace(/\D/g, "");
+      res.articles.push({ qte, nom, variante, total, prix: qte ? Math.round(total / qte) : 0 });
+      continue;
+    }
+    if ((m = l.match(/^Nom\s*:\s*(.+)$/i))) res.nom = m[1].trim();
+    else if ((m = l.match(/^Livraison à\s*:\s*(.+)$/i))) res.lieu = m[1].trim();
+    else if ((m = l.match(/^Remarque\s*:\s*(.+)$/i))) res.note = m[1].trim();
+  }
+  for (const a of res.articles) {
+    a.produit = S.data.produits.find(p => norm(p.nom) === norm(a.nom) && norm(p.variante || "") === norm(a.variante))
+      || S.data.produits.find(p => norm(nomComplet(p)) === norm(a.nom + (a.variante ? " " + a.variante : "")))
+      || (!a.variante ? S.data.produits.find(p => norm(p.nom) === norm(a.nom)) : null) || null;
+  }
+  return res;
+}
+function commandeSheet() {
+  const pays = ["Wave", "Orange Money", "MTN MoMo", "Moov Money", "Espèces"];
+  const form = openSheet(`<form><h2>Commande reçue sur WhatsApp</h2>
+    <p class="note">Copie le message de commande que le client t'a envoyé depuis ta boutique en ligne, puis colle-le ici. L'appli retrouve les produits et prépare les ventes.</p>
+    <div class="field"><label for="cm-texte">Message du client</label><textarea id="cm-texte" rows="5" placeholder="Bonjour ! Je voudrais commander :&#10;• 1 × Hub USB — 7 000 F&#10;…"></textarea></div>
+    <button type="button" class="mini" id="cm-coller">Coller depuis le presse-papiers</button>
+    <div id="cm-apercu"></div>
+    <div class="two">
+      <div class="field"><label for="cm-nom">Client</label><input id="cm-nom" name="client" type="text" list="liste-clients-cm" autocomplete="off"></div>
+      <div class="field"><label for="cm-tel">Son numéro WhatsApp</label><input id="cm-tel" name="tel" type="tel" inputmode="tel" placeholder="07 00 00 00 00"></div>
+    </div>
+    <datalist id="liste-clients-cm">${clients().filter(c => c.nom).map(c => `<option value="${esc(c.nom)}">`).join("")}</datalist>
+    <div class="two">
+      <div class="field"><label for="cm-lieu">Lieu de livraison</label><input id="cm-lieu" name="lieu" type="text" placeholder="Commune, quartier"></div>
+      <div class="field"><label for="cm-pay">Paiement</label><select id="cm-pay" name="paiement">${pays.map(x => opt(x, x, x === "Wave")).join("")}</select></div>
+    </div>
+    <label class="check"><input name="livrer" id="cm-livrer" type="checkbox" checked> À livrer</label>
+    <label class="check"><input name="encaisse" type="checkbox"> L'argent est déjà sur mon compte</label>
+    ${buttons}</form>`, fd => {
+      const c = analyserCommande($("#cm-texte").value);
+      const ok = c.articles.filter(a => a.produit);
+      if (!c.articles.length) throw new Error("Je ne trouve aucun article dans ce message. Colle le message complet envoyé par la boutique.");
+      if (!ok.length) throw new Error("Aucun de ces articles ne correspond à un produit de ton stock.");
+      const client = (fd.get("client") || "").trim(), tel = (fd.get("tel") || "").trim(), lieu = (fd.get("lieu") || "").trim();
+      const ops = [], date = todayISO();
+      for (const a of ok) {
+        const p = a.produit, id = nouvelId();
+        const v = { id, produitId: p.id, qte: a.qte, prix: a.prix, date, paiement: fd.get("paiement"), client, tel, encaisse: fd.get("encaisse") === "on", coutU: coutVente(p, a.prix), source: "boutique", cree: Date.now() };
+        if (fd.get("livrer") === "on" && p.mode !== "numerique") v.livraison = { statut: "a-livrer", commune: lieu, adresse: c.note ? "Remarque du client : " + c.note : "", livreur: "", telLivreur: "", frais: 0 };
+        ops.push({ type: "ajout", col: "ventes", id, data: v });
+      }
+      /* fiche client : on garde son quartier pour la prochaine fois */
+      const cle = cleClientDe(tel, client);
+      if (cle && lieu) {
+        const existant = clients().find(x => x.cle === cle);
+        if (existant && existant.fiche) { if (!existant.fiche.quartier) ops.push({ type: "modif", col: "clients", id: existant.fiche.id, data: { quartier: lieu } }); }
+        else { const id = nouvelId(); ops.push({ type: "ajout", col: "clients", id, data: { id, nom: client, tel, quartier: lieu, note: "", cree: Date.now() } }); }
+      }
+      db.appliquer(ops);
+      toast(`Commande enregistrée : ${plur(ok.length, "vente")}${ok.length < c.articles.length ? " (" + (c.articles.length - ok.length) + " article non reconnu)" : ""}`);
+    });
+  const apercu = () => {
+    const c = analyserCommande($("#cm-texte").value), el = $("#cm-apercu");
+    if (!c.articles.length) { el.innerHTML = ""; return; }
+    if (c.nom && !form.client.value) { form.client.value = c.nom; remplirTel(); }
+    if (c.lieu && !form.lieu.value) form.lieu.value = c.lieu;
+    const total = c.articles.filter(a => a.produit).reduce((s, a) => s + a.total, 0);
+    el.innerHTML = `<div class="releve num">${c.articles.map(a => `<div class="l"><div><div>${a.qte} × ${esc(a.nom)}${a.variante ? " (" + esc(a.variante) + ")" : ""}</div>
+      <div class="d">${a.produit ? (a.produit.mode === "depot" ? `<span class="tag gold">Pièce chez ${esc((vendeurDe(a.produit.vendeurId) || {}).nom || "ton vendeur")} : pense à la récupérer</span>` : "Trouvé dans ton stock") : `<span class="tag red">Produit introuvable : ajoute-le d'abord dans ton stock</span>`}</div></div>
+      <div class="${a.produit ? "plus" : ""}">${F(a.total)}</div><div></div></div>`).join("")}</div>
+      <div class="note num">Total reconnu : <b>${F(total)}</b>${c.note ? " · Remarque : " + esc(c.note) : ""}</div>`;
+  };
+  const remplirTel = () => { const k = clients().find(x => x.nom && norm(x.nom) === norm(form.client.value)); if (k && k.tel && !form.tel.value) form.tel.value = k.tel; };
+  $("#cm-texte").addEventListener("input", apercu);
+  form.client.addEventListener("change", remplirTel);
+  $("#cm-coller").addEventListener("click", async () => {
+    try { $("#cm-texte").value = await navigator.clipboard.readText(); apercu(); }
+    catch { toast("Appuie longuement dans le cadre, puis « Coller »."); $("#cm-texte").focus(); }
+  });
+}
+ACTIONS["commande"] = () => commandeSheet();

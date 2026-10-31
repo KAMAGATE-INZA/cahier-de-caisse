@@ -3,15 +3,25 @@
 const ONGLETS = ["bilan","ventes","stock","vendeurs","depenses"];
 const NAV_PROPRIO = document.querySelector("nav.tabs").innerHTML;
 /* Remet le menu, le titre et les boutons du propriétaire (après un aperçu ou un passage en espace vendeur) */
+/* Logo de la boutique (ou ses initiales) en haut de l'écran */
+function majAvatar() {
+  const el = document.getElementById("avatar"); if (!el) return;
+  const r = S.data.reglages || {}, logo = r.logo;
+  const nom = r.boutique || "Cahier de Caisse";
+  const ini = nom.split(/\s+/).map(m => m[0] || "").join("").slice(0, 2).toUpperCase();
+  const html = logo ? `<img src="${logo}" alt="">` : esc(ini);
+  if (el.dataset.k !== (logo || ini)) { el.innerHTML = html; el.dataset.k = logo || ini; }
+}
 function interfaceProprio() {
   const nav = document.querySelector("nav.tabs");
   if (nav.dataset.mode === "vendeur") { nav.dataset.mode = ""; nav.innerHTML = NAV_PROPRIO; }
   $("#btn-reglages").hidden = false;
-  $("header h1").textContent = "Cahier de Caisse";
+  $("header h1").textContent = S.data.reglages.boutique || "Cahier de Caisse";
   $("#fab").hidden = false;
   const b = document.getElementById("bandeau-apercu"); if (b) b.remove();
 }
 function render() {
+  majAvatar();
   if (S.role === "vendeur") return renderVendeurApp();
   if (S.apercu) return renderApercu();
   interfaceProprio();
@@ -68,16 +78,20 @@ function renderBilan(st) {
     etat = "zero"; signe = ""; verdict = "Ni gain ni perte";
     explique = "Tu as juste récupéré ce que tu as dépensé."; ligne = "= Résultat";
   }
+  /* Le bilan se lit comme un ticket de caisse : le verdict en couleur, puis le détail du calcul */
   h += `<div class="hero ${etat === "gain" ? "" : etat}">
-    <div class="label">Bénéfice net · ${esc(nomPeriode(S.periode))}</div>
-    <div class="big num">${signe}${abs}</div>
-    <div class="verdict">${verdict}</div>
-    <div class="explique">${explique}</div>
+    <div class="bandeau">
+      <div class="label">Bénéfice net, ${esc(nomPeriode(S.periode))}</div>
+      <div class="big num">${signe}${abs}</div>
+      <div class="verdict">${verdict}</div>
+      <div class="explique">${explique}</div>
+    </div>
     <div class="ledger num">
-      <div><span>Ventes (${st.nbVentes})</span><span>${F(st.ca)}</span></div>
-      <div><span>${S.data.ventes.some(v => fraisLivraison(v)) ? "− Coût des produits et livraisons" : "− Coût des produits vendus"}</span><span>${F(st.cout)}</span></div>
-      <div><span>− Dépenses</span><span>${F(st.dep)}</span></div>
-      <div class="tot"><span>${ligne}</span><span>${signe}${abs}</span></div>
+      <div class="arrete">${esc(S.data.reglages.boutique || "Cahier de Caisse")}, arrêté le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</div>
+      <div><span>Ventes (${st.nbVentes})</span><i></i><span>${F(st.ca)}</span></div>
+      <div><span>${S.data.ventes.some(v => fraisLivraison(v)) ? "− Coût des produits et livraisons" : "− Coût des produits vendus"}</span><i></i><span>${F(st.cout)}</span></div>
+      <div><span>− Dépenses</span><i></i><span>${F(st.dep)}</span></div>
+      <div class="tot"><span>${ligne}</span><i></i><span>${signe}${abs}</span></div>
     </div></div>`;
 
   const obj = +S.data.reglages.objectifMois || 0;
@@ -225,7 +239,8 @@ function renderVentes() {
   const sw = `<div class="seg" role="group" aria-label="Affichage"><button data-vue="ventes" aria-pressed="${S.vue === "ventes"}">Ventes</button><button data-vue="livraisons" aria-pressed="${S.vue === "livraisons"}">Livraisons${nLiv ? " (" + nLiv + ")" : ""}</button><button data-vue="clients" aria-pressed="${S.vue === "clients"}">Clients</button></div>`;
   if (S.vue === "clients") { el.innerHTML = sw + htmlClients(); return; }
   if (S.vue === "livraisons") { el.innerHTML = sw + htmlLivraisons(); return; }
-  if (!S.data.ventes.length) { el.innerHTML = sw + `<div class="empty"><b>Aucune vente enregistrée</b>Touche « + Vente » à chaque vente, même petite. C'est ce qui rend ton bilan juste.</div>`; return; }
+  const outilsVentes = `<div class="outils"><button class="mini" data-act="commande">Commande reçue sur WhatsApp</button></div>`;
+  if (!S.data.ventes.length) { el.innerHTML = sw + outilsVentes + `<div class="empty"><b>Aucune vente enregistrée</b>Touche « + Vente » à chaque vente, même petite. C'est ce qui rend ton bilan juste.</div>`; return; }
   const q = norm(S.q), bp = bornes(S.periode);
   const list = [...S.data.ventes]
     .filter(v => q ? norm([nomProduit(v.produitId), v.client, v.tel, v.paiement, (vendeurDe(v.vendeurId) || {}).nom].join(" ")).includes(q) : dansPeriode(v.date, bp))
@@ -233,7 +248,7 @@ function renderVentes() {
   const jours = {};
   for (const v of list) { const j = jours[v.date] || (jours[v.date] = { n: 0, total: 0 }); j.n++; j.total += totalVente(v); }
   const totalListe = list.reduce((t, v) => t + totalVente(v), 0);
-  let h = sw + segPeriode() + `<input class="search" id="q-ventes" type="search" placeholder="Chercher un produit, un client, un vendeur…" value="${esc(S.q)}" aria-label="Chercher dans les ventes">`;
+  let h = sw + outilsVentes + segPeriode() + `<input class="search" id="q-ventes" type="search" placeholder="Chercher un produit, un client, un vendeur…" value="${esc(S.q)}" aria-label="Chercher dans les ventes">`;
   h += `<div class="note num">${q ? "Recherche dans toutes les périodes : " : ""}${plur(list.length, "vente")} · ${F(totalListe)}${q ? "" : " · " + esc(nomPeriode(S.periode))}${list.length ? ". Touche une vente pour la modifier, l'encaisser ou écrire au client." : ""}</div>`;
   if (!list.length) h += q ? `<div class="empty">Aucune vente ne correspond à « ${esc(S.q)} ».</div>`
     : `<div class="empty"><b>Aucune vente sur cette période</b>Choisis « Tout » pour voir tout l'historique.</div>`;
@@ -245,7 +260,8 @@ function renderVentes() {
       ? [`Vendu par ${vd ? vd.nom : "le vendeur"}`, v.prixClient ? "client a payé " + F(v.prixClient) + "/pièce" : ""].filter(Boolean).map(esc).join(" · ") + (v.auteur === "vendeur" ? ` <span class="tag">Notée par ${esc(vd ? vd.nom : "le vendeur")}</span>` : "")
       : ([v.client, v.paiement].filter(Boolean).map(esc).join(" · ") || "&nbsp;") + (v.encaisse ? "" : ` <span class="tag gold">${estChariow(v) ? "Versement attendu" : "À recevoir"}</span>`)
         + (v.livraison && v.livraison.statut !== "livree" ? ` <span class="tag violet">${STATUTS_LIV[v.livraison.statut]}</span>` : "")
-        + (v.auteur === "vendeur" ? ` <span class="tag">Ajoutée par le vendeur</span>` : "");
+        + (v.auteur === "vendeur" ? ` <span class="tag">Ajoutée par le vendeur</span>` : "")
+        + (v.source === "boutique" ? ` <span class="tag">Boutique en ligne</span>` : "");
     const pAttendu = depot && v.auteur === "vendeur" && vd && produitDe(v.produitId) ? reverse(vd, produitDe(v.produitId), v.prixClient) : null;
     const aVerifier = !v.ajuste && pAttendu !== null && Math.abs(pAttendu - (+v.prix || 0)) > 1;
     const pv = depot ? partageVente(v) : null;

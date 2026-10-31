@@ -469,6 +469,10 @@ function reglagesSheet() {
   openSheet(`<div class="inner"><h2>Réglages</h2>
     <form id="f-reglages" class="inner" style="gap:12px">
       <div class="field"><label for="g-boutique">Nom de ta boutique</label><input id="g-boutique" name="boutique" type="text" placeholder="Apparaît sur les reçus" value="${esc(r.boutique)}"></div>
+      <div class="field"><label>Logo de ta boutique</label>
+        <div class="logo-pick"><span class="avatar" id="g-logo-ap"></span><div class="btns" style="flex-wrap:wrap"><button type="button" class="mini" id="g-logo-btn">${r.logo ? "Changer le logo" : "Choisir une image"}</button>${r.logo ? `<button type="button" class="mini danger" id="g-logo-x">Retirer</button>` : ""}</div></div>
+        <input type="file" id="g-logo" accept="image/*" hidden>
+        <div class="hint">Il apparaît en haut de l'appli, dans ta boutique en ligne et chez tes vendeurs. Une image carrée marche le mieux.</div></div>
       <div class="field"><label for="g-numero">Ton numéro Mobile Money</label><input id="g-numero" name="numero" type="tel" inputmode="tel" placeholder="Pour que les clients te paient" value="${esc(r.numero)}"></div>
       <div class="field"><label for="g-obj">Objectif de bénéfice par mois (F)</label><input id="g-obj" name="objectifMois" type="number" inputmode="numeric" min="0" step="1000" value="${+r.objectifMois || ""}" placeholder="Ex. 50000"></div>
       <button type="submit" class="btn pri">Enregistrer les réglages</button>
@@ -494,15 +498,37 @@ function reglagesSheet() {
     <button class="btn sec" data-close>Fermer</button>
     <p class="hint" style="text-align:center">Cahier de Caisse · version ${VERSION_APPLI}</p>
   </div>`);
+  let logo = r.logo || "";
+  const apercuLogo = () => { const n = ($("#g-boutique").value || "Cahier de Caisse").trim(); $("#g-logo-ap").innerHTML = logo ? `<img src="${logo}" alt="Logo">` : esc(n.split(/\s+/).map(m => m[0] || "").join("").slice(0, 2).toUpperCase()); };
+  apercuLogo(); $("#g-boutique").addEventListener("input", apercuLogo);
+  $("#g-logo-btn").addEventListener("click", () => $("#g-logo").click());
+  $("#g-logo").addEventListener("change", async () => {
+    const f = $("#g-logo").files[0]; if (!f) return;
+    try { logo = await compresserLogo(f); apercuLogo(); toast("Logo prêt : touche « Enregistrer les réglages »"); } catch { toast("Cette image n'a pas pu être lue."); }
+  });
+  const x = document.getElementById("g-logo-x"); if (x) x.addEventListener("click", () => { logo = ""; apercuLogo(); x.remove(); });
   $("#f-reglages").addEventListener("submit", e => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    S.data.reglages = Object.assign({}, S.data.reglages, { boutique: fd.get("boutique").trim(), numero: fd.get("numero").trim(), objectifMois: +fd.get("objectifMois") || 0 });
+    S.data.reglages = Object.assign({}, S.data.reglages, { boutique: fd.get("boutique").trim(), numero: fd.get("numero").trim(), objectifMois: +fd.get("objectifMois") || 0, logo: logo || undefined });
+    if (!logo) delete S.data.reglages.logo;
+    if (typeof planifierVitrine === "function") planifierVitrine(1000);
     if (db.cloud && db.cloud.reglages) db.cloud.reglages(S.data.reglages);
     enregistrer(); render(); closeSheet(); toast("Réglages enregistrés");
   });
 }
 
+/* Logo : carré de 256 px, recadré au centre, léger (environ 15 Ko) */
+async function compresserLogo(fichier) {
+  const url = URL.createObjectURL(fichier);
+  try {
+    const img = await chargerImage(url); if (!img) throw new Error("image");
+    const cote = Math.min(img.width, img.height), c = document.createElement("canvas"); c.width = c.height = 256;
+    const x = c.getContext("2d"); x.fillStyle = "#ffffff"; x.fillRect(0, 0, 256, 256);
+    x.drawImage(img, (img.width - cote) / 2, (img.height - cote) / 2, cote, cote, 0, 0, 256, 256);
+    return c.toDataURL("image/jpeg", 0.86);
+  } finally { URL.revokeObjectURL(url); }
+}
 /* Le navigateur réserve environ 5 millions de caractères à l'appli */
 function memoire() {
   let n = 0; try { n = (localStorage.getItem(KEY) || "").length; } catch {}

@@ -1,7 +1,7 @@
 // Garde l'appli disponible hors connexion.
 // Change ce numéro à chaque mise à jour de l'appli.
-const CACHE = "cahier-de-caisse-v14";
-const FICHIERS = ["./", "./index.html", "./core.js", "./vues.js", "./formulaires.js", "./outils.js", "./catalogue.js", "./suivi.js", "./vitrine.js", "./boutique.html", "./config.js", "./synchro.js", "./main.js", "./cloud.js", "./firebase-sdk.js", "./firestore.rules", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
+const CACHE = "cahier-de-caisse-v15-1";
+const FICHIERS = ["./", "./index.html", "./regles.js", "./core.js", "./vues.js", "./formulaires.js", "./outils.js", "./catalogue.js", "./suivi.js", "./vitrine.js", "./boutique.html", "./config.js", "./synchro.js", "./main.js", "./cloud.js", "./firebase-sdk.js", "./firestore.rules", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FICHIERS)));

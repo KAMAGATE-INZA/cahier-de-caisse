@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Règles de sécurité du Cahier de Caisse.
+// Règles de sécurité du Cahier de Caisse — version 14.
 // À coller dans Firebase : Firestore Database > Règles > Publier.
 // Principe : le propriétaire voit et modifie tout ce qui est à lui.
 // Un vendeur ne lit que SES produits, SES ventes, SES versements et sa fiche.

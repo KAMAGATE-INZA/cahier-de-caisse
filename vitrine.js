@@ -71,7 +71,7 @@ async function contenuVitrine() {
   articles.sort((a, b) => (a.epuise - b.epuise) || (b.recent - a.recent) || a.nom.localeCompare(b.nom));
   articles.forEach((a, i) => { a.ordre = i; delete a.recent; });
   const racine = {
-    nom: r.boutique || "Ma boutique", whatsapp: numeroWa(v.whatsapp || r.numero), accueil: (v.accueil || "").slice(0, 300),
+    nom: r.boutique || "Ma boutique", logo: /^data:image\//.test(r.logo || "") ? r.logo : "", whatsapp: numeroWa(v.whatsapp || r.numero), accueil: (v.accueil || "").slice(0, 300),
     theme: THEMES[v.theme] ? v.theme : "emeraude", couleur: (THEMES[v.theme] || THEMES.emeraude).fonce,
     categories: [...new Set(articles.map(a => a.categorie))]
   };
@@ -84,7 +84,7 @@ function planifierVitrine(delai) {
   const v = reglagesVitrine();
   if (!v.active || !v.nom || S.role !== "proprio" || S.apercu || !cloudActifProprio()) return;
   clearTimeout(_minuteurVitrine);
-  _minuteurVitrine = setTimeout(() => publierVitrine(), delai === undefined ? 4000 : delai);
+  _minuteurVitrine = setTimeout(() => publierVitrine().catch(() => {}), delai === undefined ? 4000 : delai);
 }
 async function publierVitrine(ancien) {
   if (_publication) { await _publication.catch(() => {}); }
@@ -92,22 +92,33 @@ async function publierVitrine(ancien) {
   if (!v.active || !v.nom || !cloudActifProprio()) return null;
   _publication = (async () => {
     const etat = lireEtatVitrine();
+    majFeuilleVitrine();
+    const essayer = async () => { const c = await contenuVitrine(); return Cloud.publierVitrine({ nom: v.nom, ancien, ...c }); };
     try {
-      const c = await contenuVitrine();
-      const res = await Cloud.publierVitrine({ nom: v.nom, ancien, ...c });
+      let res;
+      try { res = await essayer(); }
+      catch (e) {
+        /* Refus du serveur : on cherche la cause, et on répare ce qui peut l'être */
+        if (!String((e && e.code) || "").includes("permission-denied")) throw e;
+        const diag = await Cloud.diagnostiquerRegles();
+        if (diag === "compte-repare") res = await essayer();
+        else throw Object.assign(new Error(diag), { code: "permission-denied", diag });
+      }
       ecrireEtatVitrine({ maj: Date.now(), nb: res.nb, erreur: "", nom: v.nom });
       return res;
     } catch (e) {
       const code = String((e && e.code) || "");
-      const msg = code.includes("permission-denied") ? "Le serveur refuse la publication : colle les nouvelles règles de sécurité dans Firebase (Réglages → Synchronisation → Copier les règles)."
+      const msg = e.diag === "anciennes" ? "Les règles de sécurité publiées dans Firebase sont une ancienne version, sans la boutique. Touche « Copier les règles (version " + VERSION_REGLES + ") » ci-dessous, puis colle-les dans Firebase à la place des anciennes et publie."
+        : code.includes("permission-denied") ? "Le serveur refuse la publication alors que les règles semblent à jour. Recopie les règles (version " + VERSION_REGLES + ") dans Firebase, attends une minute, puis réessaie."
         : code === "vitrine-prise" ? e.message
         : code.includes("unavailable") || !navigator.onLine ? "Pas de connexion : la boutique sera mise à jour au retour du réseau."
         : (typeof Cloud !== "undefined" && Cloud.messageErreur ? Cloud.messageErreur(e) : String(e));
-      ecrireEtatVitrine(Object.assign(etat, { erreur: msg }));
+      ecrireEtatVitrine(Object.assign(etat, { erreur: msg, regles: e.diag === "anciennes" || code.includes("permission-denied") }));
       throw Object.assign(new Error(msg), { code });
-    } finally { majFeuilleVitrine(); }
+    }
   })();
-  const p = _publication; try { return await p; } finally { if (_publication === p) _publication = null; }
+  const p = _publication;
+  try { return await p; } finally { if (_publication === p) _publication = null; majFeuilleVitrine(); }
 }
 window.addEventListener("online", () => planifierVitrine(1500));
 
@@ -122,15 +133,17 @@ function texteInvitationBoutique() {
   const r = S.data.reglages;
   return `Bonjour ! Voici ma boutique en ligne${r.boutique ? " " + r.boutique : ""} : tous mes articles avec les photos et les prix. Tu choisis, tu commandes sur WhatsApp en un clic.\n\n${lienVitrine()}`;
 }
+let _dessinerPartage = null;
 function majFeuilleVitrine() {
   const el = document.getElementById("vt-etat"); if (!el) return;
   el.innerHTML = htmlEtatVitrine();
+  if (_dessinerPartage && document.getElementById("vt-partage")) _dessinerPartage();
 }
 function htmlEtatVitrine() {
   const v = reglagesVitrine(), e = lireEtatVitrine();
   if (!v.active) return `<div class="note">La boutique n'est pas en ligne.</div>`;
   if (_publication) return `<div class="note">Mise à jour en cours…</div>`;
-  if (e.erreur) return `<div class="banner red"><span>${esc(e.erreur)}</span></div>`;
+  if (e.erreur) return `<div class="banner red"><span>${esc(e.erreur)}</span>${e.regles ? `<button type="button" class="mini" data-act="voir-regles">Copier les règles (version ${VERSION_REGLES})</button>` : ""}</div>`;
   if (e.maj && e.nom === v.nom) return `<div class="note num">En ligne · ${plur(e.nb || 0, "article")} · mise à jour ${new Date(e.maj).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}. Elle suit ton stock toute seule.</div>`;
   return `<div class="note">Pas encore publiée sur cet appareil.</div>`;
 }
@@ -171,13 +184,14 @@ function vitrineSheet() {
   const dessinerPartage = () => {
     const w = reglagesVitrine(), el = $("#vt-partage");
     if (!w.active || !w.nom) { el.innerHTML = ""; return; }
-    const lien = lienVitrine(w);
+    const lien = lienVitrine(w), e = lireEtatVitrine(), publiee = e.maj && e.nom === w.nom && !e.erreur;
+    if (!publiee) { el.innerHTML = `<div class="banner red" style="margin-top:12px"><span><b>Ne partage pas encore le lien :</b> la boutique n'est pas publiée${e.erreur ? " (voir le message ci-dessus)" : ""}. Tes clients verraient une page d'erreur.</span></div>`; return; }
     el.innerHTML = `<div class="box" style="margin-top:12px"><div class="label">Ton lien</div><div style="word-break:break-all"><a href="${esc(lien)}" target="_blank" rel="noopener">${esc(lien)}</a></div>
       <div class="btns" style="flex-wrap:wrap;margin-top:8px"><button type="button" class="mini" id="vt-copier">Copier le lien</button><a class="mini wa" href="https://wa.me/?text=${encodeURIComponent(texteInvitationBoutique())}" target="_blank" rel="noopener">Partager sur WhatsApp</a><a class="mini" href="${esc(lien)}" target="_blank" rel="noopener">Voir la boutique</a></div>
       <p class="hint">Mets ce lien dans ta bio WhatsApp, ton statut, ta page Facebook ou TikTok.</p></div>`;
     $("#vt-copier").addEventListener("click", () => navigator.clipboard.writeText(lien).then(() => toast("Lien copié"), () => toast("Copie impossible")));
   };
-  dessinerPartage();
+  dessinerPartage(); _dessinerPartage = dessinerPartage;
   form.nom.addEventListener("input", () => { const p = form.nom.selectionStart, s = form.nom.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"); if (s !== form.nom.value) { form.nom.value = s; try { form.nom.setSelectionRange(p, p); } catch {} } });
   form.addEventListener("submit", async e => {
     e.preventDefault();
@@ -189,7 +203,7 @@ function vitrineSheet() {
     const nv = { active: fd.get("active") === "on", nom, whatsapp: (fd.get("whatsapp") || "").trim(), accueil: (fd.get("accueil") || "").trim(), theme: fd.get("theme") || "emeraude", epuises: fd.get("epuises") === "on" };
     const bouton = form.querySelector("button[type=submit]"); bouton.disabled = true; bouton.textContent = "Publication…";
     try {
-      if (nv.active && nom !== avant.nom && !(await Cloud.nomVitrineLibre(nom))) throw new Error("Cette adresse est déjà prise par une autre boutique. Choisis-en une autre.");
+      if (nv.active && nom !== avant.nom && !(await Cloud.nomVitrineLibre(nom).catch(() => true))) throw new Error("Cette adresse est déjà prise par une autre boutique. Choisis-en une autre.");
       sauverReglagesVitrine(nv);
       if (nv.active) {
         majFeuilleVitrine();
@@ -199,7 +213,7 @@ function vitrineSheet() {
         await Cloud.retirerVitrine(avant.nom); ecrireEtatVitrine({}); toast("Boutique retirée d'internet");
       } else toast("Enregistré");
       form.nom.value = nom;
-    } catch (x) { err.textContent = x.message || String(x); }
+    } catch (x) { if ((lireEtatVitrine().erreur || "") !== x.message) err.textContent = x.message || String(x); } /* déjà affiché dans l'état de la boutique */
     bouton.disabled = false; bouton.textContent = "Enregistrer et publier";
     majFeuilleVitrine(); dessinerPartage();
   });

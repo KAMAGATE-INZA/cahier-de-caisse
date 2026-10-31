@@ -154,11 +154,36 @@ ACTIONS["liens-courts"] = async () => {
     <button class="btn sec" data-close>Fermer</button></div>`);
   $("#lc-dl").addEventListener("click", () => partagerFichier("config.js", contenu, "text/javascript", "config.js"));
 };
-ACTIONS["copier-regles"] = async () => {
-  try {
-    const t = await (await fetch("firestore.rules", { cache: "no-store" })).text();
-    await navigator.clipboard.writeText(t); toast("Règles copiées : colle-les dans Firebase");
-  } catch { toast("Copie impossible : ouvre le fichier firestore.rules et copie son contenu."); }
+/* Règles de sécurité : copiées depuis le code de l'appli (toujours la bonne version), avec le mode d'emploi */
+ACTIONS["copier-regles"] = ACTIONS["voir-regles"] = () => {
+  openSheet(`<div class="inner"><h2>Règles de sécurité · version ${VERSION_REGLES}</h2>
+    <ol class="etapes">
+      <li>Touche <b>Copier les règles</b>.</li>
+      <li>Dans Firebase : <b>Firestore Database → Règles</b>.</li>
+      <li>Efface <b>tout</b> le texte déjà présent, puis colle.</li>
+      <li>Touche <b>Publier</b>. Attends une minute avant de réessayer dans l'appli.</li>
+    </ol>
+    <button class="btn pri" id="rg-copier">Copier les règles</button>
+    <textarea id="rg-texte" readonly rows="6" class="code" aria-label="Texte des règles">${esc(REGLES_FIRESTORE)}</textarea>
+    <p class="hint">En haut du texte collé dans Firebase, tu dois lire « version ${VERSION_REGLES} ». Si la copie ne marche pas, appuie longuement dans le cadre, « Tout sélectionner », puis « Copier ».</p>
+    <button class="btn sec" id="rg-verifier">Vérifier les règles publiées</button>
+    <div class="note" id="rg-etat"></div>
+    <button class="btn sec" data-close>Fermer</button></div>`);
+  $("#rg-copier").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(REGLES_FIRESTORE); toast("Règles copiées : colle-les dans Firebase"); }
+    catch { const t = $("#rg-texte"); t.focus(); t.select(); try { document.execCommand("copy"); toast("Règles copiées"); } catch { toast("Sélectionne le texte et copie-le"); } }
+  });
+  $("#rg-verifier").addEventListener("click", async () => {
+    const el = $("#rg-etat");
+    if (typeof Cloud === "undefined" || Cloud.etat !== "actif" || !Cloud.diagnostiquerRegles) { el.textContent = "Connecte d'abord la synchronisation."; return; }
+    el.textContent = "Vérification…";
+    const d = await Cloud.diagnostiquerRegles();
+    el.innerHTML = d === "anciennes" ? `<b style="color:var(--red)">Les règles dans Firebase sont une ancienne version.</b> Colle celles-ci à la place et publie.`
+      : d === "reseau" ? "Pas de connexion : réessaie quand le réseau revient."
+      : d === "compte-repare" ? `<b style="color:var(--accent)">Règles à jour.</b> Ta fiche de compte manquait : elle vient d'être recréée.`
+      : `<b style="color:var(--accent)">Règles à jour ✓</b> Firebase utilise bien la version qui gère la boutique en ligne.`;
+    if (d !== "anciennes" && typeof planifierVitrine === "function") planifierVitrine(500);
+  });
 };
 ACTIONS["deconnecter"] = () => { closeSheet(); Cloud.deconnecter(); };
 ACTIONS["desactiver-synchro"] = (id, b) => {
